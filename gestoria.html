@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PARALLAX · Panel de Gestoría</title>
+  <meta name="description" content="Panel interno de Gestoría de PARALLAX: contratos, accesos, consumos y resumen de gastos por locatario.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#050608">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/panel.css">
+</head>
+<body class="panel metal">
+  <script src="assets/js/core/icons.js"></script>
+
+  <div class="app">
+    <!-- ============================ SIDEBAR ============================ -->
+    <aside class="sidebar" id="sidebar" aria-label="Módulos de Gestoría">
+      <a class="brand" href="#/inicio">
+        <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+        <span class="brand-word">PARALLAX</span>
+      </a>
+      <p class="sidebar-tag">Panel de Gestoría</p>
+
+      <nav class="side-nav">
+        <a class="side-link" href="#/inicio" data-route="inicio">
+          <svg class="i" aria-hidden="true"><use href="#i-grid"/></svg> Inicio
+        </a>
+        <p class="side-label">Gestoría</p>
+        <a class="side-link" href="#/contratos" data-route="contratos">
+          <svg class="i" aria-hidden="true"><use href="#i-contract"/></svg> Gestoría de Contratos
+        </a>
+        <a class="side-link" href="#/accesos" data-route="accesos">
+          <svg class="i" aria-hidden="true"><use href="#i-badge"/></svg> Control de Accesos
+          <span class="count is-cyan" id="count-presentes" hidden></span>
+        </a>
+        <a class="side-link" href="#/consumos" data-route="consumos">
+          <svg class="i" aria-hidden="true"><use href="#i-package"/></svg> Gestoría de Consumos
+        </a>
+        <a class="side-link" href="#/facturacion" data-route="facturacion">
+          <svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg> Gastos y Facturación
+        </a>
+        <p class="side-label">Captación</p>
+        <a class="side-link" href="#/consultas" data-route="consultas">
+          <svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg> Consultas del sitio
+          <span class="count" id="count-consultas" hidden></span>
+        </a>
+        <p class="side-label">Sistema</p>
+        <a class="side-link" href="#/configuracion" data-route="configuracion">
+          <svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg> Configuración
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span class="env-pill" id="env-pill"><span class="dot"></span><span>Datos guardados en este navegador</span></span>
+        <a href="index.html"><svg class="i i-sm" aria-hidden="true"><use href="#i-globe"/></svg> Ver sitio público</a>
+      </div>
+    </aside>
+    <div class="scrim" data-action-global="close-side"></div>
+
+    <!-- ============================ CONTENIDO ============================ -->
+    <div class="main">
+      <header class="topbar">
+        <button class="btn btn-icon btn-ghost menu-btn" type="button" data-action-global="open-side" aria-label="Abrir menú" aria-controls="sidebar">
+          <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+        </button>
+        <div class="crumbs">
+          <span class="hide-sm">Gestoría</span>
+          <svg class="i i-sm hide-sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          <strong id="page-crumb">Inicio</strong>
+        </div>
+        <div class="topbar-right">
+          <a class="live-pill" href="#/accesos" title="Personas en el espacio ahora">
+            <span class="pulse"></span><span id="live-presentes">0</span><span class="hide-sm">&nbsp;en el espacio</span>
+          </a>
+          <span class="clock" id="clock" aria-live="off"></span>
+        </div>
+      </header>
+
+      <main class="view" id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <dialog class="modal" id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="print-root" aria-hidden="true"></div>
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+  <script src="assets/js/core/util.js"></script>
+  <script src="assets/js/core/store.js"></script>
+  <script src="assets/js/core/billing.js"></script>
+  <script src="assets/js/core/seed.js"></script>
+  <script src="assets/js/panel/ui.js"></script>
+  <script src="assets/js/panel/helpers.js"></script>
+  <script src="assets/js/panel/views/inicio.js"></script>
+  <script src="assets/js/panel/views/contratos.js"></script>
+  <script src="assets/js/panel/views/accesos.js"></script>
+  <script src="assets/js/panel/views/consumos.js"></script>
+  <script src="assets/js/panel/views/facturacion.js"></script>
+  <script src="assets/js/panel/views/consultas.js"></script>
+  <script src="assets/js/panel/views/configuracion.js"></script>
+  <script src="assets/js/panel/app.js"></script>
+</body>
+</html>

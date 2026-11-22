@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PARALLAX · Coworking corporativo e infraestructura compartida</title>
+  <meta name="description" content="PARALLAX: coworking de alto nivel con infraestructura y servicios compartidos corporativos, Asesoría y Gestoría para empresas y profesionales.">
+  <meta name="theme-color" content="#050608">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PARALLAX · Coworking corporativo">
+  <meta property="og:description" content="Infraestructura y servicios compartidos corporativos, con Asesoría y Gestoría integral.">
+  <meta property="og:image" content="assets/img/og-parallax.jpg">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="assets/img/parallax-emblem.webp" type="image/webp">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/landing.css">
+</head>
+<body class="landing">
+  <script src="assets/js/core/icons.js"></script>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <!-- Fondo: textura metálica, retícula y campo de partículas con profundidad -->
+  <div class="bg-fx" aria-hidden="true">
+    <canvas id="fx-canvas"></canvas>
+    <div class="bg-grid"></div>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <!-- ============================ HEADER ============================ -->
+  <header class="site-header" id="top">
+    <div class="container header-inner">
+      <a class="brand" href="#hero" aria-label="PARALLAX — inicio">
+        <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+        <span class="brand-word">PARALLAX</span>
+      </a>
+
+      <nav class="site-nav" id="site-nav" aria-label="Navegación principal">
+        <a href="#nosotros" data-nav>Quiénes somos</a>
+        <a href="#servicios" data-nav>Servicios</a>
+        <a href="#membresias" data-nav>Membresías</a>
+        <a href="#contacto" data-nav>Contacto</a>
+        <a href="gestoria.html" class="nav-gestoria">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Acceso Gestoría
+        </a>
+      </nav>
+
+      <div class="header-cta">
+        <a class="btn btn-ghost btn-sm hide-md" href="gestoria.html" title="Panel interno de Gestoría">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Gestoría
+        </a>
+        <a class="btn btn-primary btn-sm hide-xs" href="#contacto">Agendá una visita</a>
+        <button class="btn btn-icon nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Abrir menú">
+          <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ============================ HERO ============================ -->
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+      <div class="hero-layers" aria-hidden="true">
+        <svg class="hex hex-1" data-depth="0.6" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z"/></svg>
+        <svg class="hex hex-2" data-depth="-0.9" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z M50 4v92 M10 27l80 46 M90 27 10 73"/></svg>
+        <svg class="hex hex-3" data-depth="1.4" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z"/></svg>
+        <svg class="hex hex-4" data-depth="-1.8" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z"/></svg>
+        <svg class="hex hex-5" data-depth="2.2" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z M50 4v92"/></svg>
+        <div class="beam beam-cyan" data-depth="0.4"></div>
+        <div class="beam beam-magenta" data-depth="-0.5"></div>
+      </div>
+
+      <div class="container hero-inner">
+        <div class="hero-logo">
+          <div class="hero-emblem-wrap" data-depth="-0.35">
+            <div class="emblem-ghost emblem-ghost-c" aria-hidden="true"></div>
+            <div class="emblem-ghost emblem-ghost-m" aria-hidden="true"></div>
+            <picture>
+              <source srcset="assets/img/parallax-emblem.webp" type="image/webp">
+              <img class="hero-emblem" src="assets/img/parallax-emblem.png" alt="" width="560" height="545" fetchpriority="high">
+            </picture>
+          </div>
+          <h1 class="hero-wordmark" id="hero-title">
+            <span class="sr-only">PARALLAX</span>
+            <picture>
+              <source srcset="assets/img/parallax-wordmark.webp" type="image/webp">
+              <img src="assets/img/parallax-wordmark.png" alt="" width="878" height="100">
+            </picture>
+          </h1>
+        </div>
+
+        <p class="eyebrow hero-eyebrow reveal">Coworking corporativo · Infraestructura y servicios compartidos</p>
+        <p class="hero-title display reveal">Tu empresa, <span class="neon-text">en otra perspectiva.</span></p>
+        <p class="hero-lead reveal">Espacios de trabajo premium, servicios compartidos y Asesoría integral para empresas y profesionales que quieren concentrarse únicamente en hacer crecer su negocio.</p>
+
+        <div class="hero-actions reveal">
+          <a class="btn btn-primary btn-lg" href="#contacto">
+            Agendá una visita <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+          </a>
+          <a class="btn btn-lg" href="#servicios">Conocé los servicios</a>
+        </div>
+
+        <ul class="hero-chips reveal" aria-label="Destacados">
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-badge"/></svg> Acceso con credencial</li>
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-wifi"/></svg> Conectividad corporativa</li>
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-receipt"/></svg> Un único resumen mensual</li>
+        </ul>
+      </div>
+
+      <a class="scroll-cue" href="#nosotros" aria-label="Ir a Quiénes somos">
+        <span></span>
+      </a>
+    </section>
+
+    <!-- Cinta de conceptos -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>Oficinas privadas</span><i></i><span>Puestos flexibles</span><i></i><span>Suites corporativas</span><i></i>
+        <span>Salas de reuniones</span><i></i><span>Asesoría</span><i></i><span>Gestoría</span><i></i>
+        <span>Domicilio comercial</span><i></i><span>Recepción corporativa</span><i></i>
+        <span>Oficinas privadas</span><i></i><span>Puestos flexibles</span><i></i><span>Suites corporativas</span><i></i>
+        <span>Salas de reuniones</span><i></i><span>Asesoría</span><i></i><span>Gestoría</span><i></i>
+        <span>Domicilio comercial</span><i></i><span>Recepción corporativa</span><i></i>
+      </div>
+    </div>
+
+    <!-- ============================ QUIÉNES SOMOS ============================ -->
+    <section class="section" id="nosotros" aria-labelledby="nosotros-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">01 — Quiénes somos</p>
+          <h2 class="section-title display" id="nosotros-title">Infraestructura corporativa, <span class="neon-text">lista para operar.</span></h2>
+        </header>
+
+        <div class="about-grid">
+          <div class="about-copy reveal">
+            <p class="lead">PARALLAX es un espacio de coworking de alto nivel dedicado a la provisión de infraestructura y servicios compartidos corporativos.</p>
+            <p>Diseñamos un entorno donde empresas y profesionales independientes acceden a oficinas equipadas, tecnología, atención corporativa y Asesoría especializada, sin las cargas de montar y sostener una sede propia.</p>
+            <p>Cada locatario conserva su total autonomía: nosotros nos ocupamos del espacio y de los servicios; vos, de tu negocio. Todo se formaliza a través de abonos de membresía claros, con un único resumen de gastos mensual.</p>
+
+            <dl class="about-facts">
+              <div>
+                <dt><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg> Infraestructura</dt>
+                <dd>Oficinas, puestos, salas y conectividad de nivel corporativo.</dd>
+              </div>
+              <div>
+                <dt><svg class="i" aria-hidden="true"><use href="#i-users"/></svg> Servicios compartidos</dt>
+                <dd>Recepción, mantenimiento, limpieza y logística resueltos.</dd>
+              </div>
+              <div>
+                <dt><svg class="i" aria-hidden="true"><use href="#i-briefcase"/></svg> Asesoría y Gestoría</dt>
+                <dd>Acompañamiento administrativo y de trámites para tu operación.</dd>
+              </div>
+            </dl>
+          </div>
+
+          <!-- Visual de capas con profundidad -->
+          <div class="about-visual reveal" aria-hidden="true">
+            <div class="stack" data-tilt>
+              <div class="stack-card stack-3">
+                <span class="stack-tag mono">L3</span>
+                <strong>Asesoría y Gestoría</strong>
+                <span class="stack-line"></span><span class="stack-line short"></span>
+              </div>
+              <div class="stack-card stack-2">
+                <span class="stack-tag mono">L2</span>
+                <strong>Servicios compartidos</strong>
+                <span class="stack-line"></span><span class="stack-line short"></span>
+              </div>
+              <div class="stack-card stack-1">
+                <span class="stack-tag mono">L1</span>
+                <strong>Infraestructura</strong>
+                <div class="stack-grid">
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ¿Nuevo en el coworking? -->
+        <div class="explainer reveal">
+          <div class="explainer-head">
+            <span class="badge badge-grad"><svg class="i i-sm" aria-hidden="true"><use href="#i-spark"/></svg> ¿Nuevo en el coworking?</span>
+            <h3>Un espacio profesional completo, <span class="text-2">sin los costos ni la complejidad de una oficina propia.</span></h3>
+          </div>
+          <div class="compare" role="table" aria-label="Comparación entre oficina tradicional y PARALLAX">
+            <div class="compare-row compare-header" role="row">
+              <span role="columnheader"></span>
+              <span role="columnheader">Oficina tradicional</span>
+              <span role="columnheader" class="neon-text">PARALLAX</span>
+            </div>
+            <div class="compare-row" role="row">
+              <span role="rowheader">Inversión inicial</span>
+              <span role="cell">Obra, mobiliario y equipamiento a cargo propio</span>
+              <span role="cell"><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Todo listo desde el primer día</span>
+            </div>
+            <div class="compare-row" role="row">
+              <span role="rowheader">Servicios</span>
+              <span role="cell">Proveedores separados para cada necesidad</span>
+              <span role="cell"><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Conectividad, limpieza, recepción y mantenimiento incluidos</span>
+            </div>
+            <div class="compare-row" role="row">
+              <span role="rowheader">Flexibilidad</span>
+              <span role="cell">Compromisos rígidos y de largo plazo</span>
+              <span role="cell"><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Abonos que acompañan tu crecimiento</span>
+            </div>
+            <div class="compare-row" role="row">
+              <span role="rowheader">Administración</span>
+              <span role="cell">Múltiples facturas y vencimientos</span>
+              <span role="cell"><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Un único resumen de gastos mensual</span>
+            </div>
+            <div class="compare-row" role="row">
+              <span role="rowheader">Red de contactos</span>
+              <span role="cell">Trabajo aislado</span>
+              <span role="cell"><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Comunidad de empresas y profesionales</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cómo empezar -->
+        <ol class="steps">
+          <li class="step reveal">
+            <span class="step-n mono">01</span>
+            <h4>Visitá el espacio</h4>
+            <p>Recorré las instalaciones y contanos qué necesita tu equipo.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-n mono">02</span>
+            <h4>Recibí tu propuesta</h4>
+            <p>Diseñamos un abono a medida de tu operación y presupuesto.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-n mono">03</span>
+            <h4>Formalizá el acuerdo</h4>
+            <p>Firmamos un contrato de locación de servicios simple y transparente.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-n mono">04</span>
+            <h4>Activá tus credenciales</h4>
+            <p>Tu equipo ingresa con credencial y empieza a trabajar.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================ SERVICIOS ============================ -->
+    <section class="section" id="servicios" aria-labelledby="servicios-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">02 — Servicios</p>
+          <h2 class="section-title display" id="servicios-title">Todo lo que tu operación necesita, <span class="neon-text">bajo un mismo techo.</span></h2>
+          <p class="section-lead">Infraestructura física, servicios compartidos y Asesoría profesional integrados en una sola propuesta.</p>
+        </header>
+
+        <div class="services">
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-office"/></svg></div>
+            <h3>Oficinas privadas y suites</h3>
+            <p>Ambientes cerrados y equipados para equipos de 2 a más de 20 personas, con opción de identidad de marca.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-desk"/></svg></div>
+            <h3>Puestos fijos y flexibles</h3>
+            <p>Escritorios dedicados o puestos rotativos en áreas abiertas, diseñados para la concentración.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-users"/></svg></div>
+            <h3>Salas de reuniones</h3>
+            <p>Salas equipadas para videoconferencias, presentaciones y encuentros con clientes, reservables por hora.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-wifi"/></svg></div>
+            <h3>Conectividad e IT</h3>
+            <p>Fibra óptica, Wi-Fi seguro segmentado, impresión en red y soporte técnico para tu equipamiento.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-door"/></svg></div>
+            <h3>Recepción corporativa</h3>
+            <p>Atención de visitas, recepción de correspondencia y encomiendas, y domicilio comercial para tu empresa.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-shield"/></svg></div>
+            <h3>Seguridad y accesos</h3>
+            <p>Ingreso con credencial personal, registro de accesos y espacios monitoreados para tu tranquilidad.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-coffee"/></svg></div>
+            <h3>Insumos y amenities</h3>
+            <p>Café de especialidad, papelería, mobiliario adicional y utilería disponibles cuando los necesites.</p>
+          </article>
+          <article class="service glow-border reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg" aria-hidden="true"><use href="#i-receipt"/></svg></div>
+            <h3>Facturación unificada</h3>
+            <p>Abono y consumos consolidados en un único resumen mensual, listo para tu sistema contable.</p>
+          </article>
+        </div>
+
+        <!-- Destacado: Asesoría y Gestoría -->
+        <article class="advisory glow-border reveal" data-spot>
+          <div class="advisory-copy">
+            <span class="badge badge-cyan"><span class="dot"></span> Servicio profesional</span>
+            <h3 class="display">Asesoría <span class="neon-text">&amp;</span> Gestoría</h3>
+            <p>Un equipo especializado acompaña la operación administrativa de cada locatario para que el día a día fluya sin fricciones.</p>
+            <a class="btn btn-outline-cyan" href="#contacto" data-interes="Asesoría y Gestoría">
+              Consultar por Asesoría <svg class="i i-sm" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+            </a>
+          </div>
+          <ul class="advisory-list">
+            <li><svg class="i" aria-hidden="true"><use href="#i-briefcase"/></svg><div><strong>Asesoría administrativa</strong><span>Organización de procesos, documentación y proveedores.</span></div></li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-file-check"/></svg><div><strong>Gestoría de trámites</strong><span>Gestiones ante organismos, entidades y registros.</span></div></li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-contract"/></svg><div><strong>Asesoría contable e impositiva</strong><span>Orientación para la presentación de obligaciones periódicas.</span></div></li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg><div><strong>Gestoría de consumos</strong><span>Registro y control de insumos con resumen mensual detallado.</span></div></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================ MEMBRESÍAS ============================ -->
+    <section class="section" id="membresias" aria-labelledby="membresias-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">03 — Abonos de Membresía</p>
+          <h2 class="section-title display" id="membresias-title">Elegí la modalidad <span class="neon-text">que acompaña a tu equipo.</span></h2>
+          <p class="section-lead">Todas las modalidades incluyen conectividad, limpieza, recepción y café. Escalá cuando lo necesites.</p>
+        </header>
+
+        <div class="plans">
+          <article class="plan glow-border reveal" data-spot>
+            <p class="plan-kicker mono">01</p>
+            <h3>Puesto Flexible</h3>
+            <p class="plan-desc">Para profesionales independientes que buscan un entorno de trabajo profesional.</p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Puesto en áreas abiertas</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Horas de sala de reuniones</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Credencial personal</li>
+            </ul>
+            <button class="btn btn-block" type="button" data-interes="Puesto Flexible">Consultar</button>
+          </article>
+          <article class="plan glow-border reveal" data-spot>
+            <p class="plan-kicker mono">02</p>
+            <h3>Escritorio Dedicado</h3>
+            <p class="plan-desc">Tu escritorio fijo, siempre listo, con guardado seguro.</p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Escritorio fijo y locker</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Recepción de correspondencia</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Horas de sala de reuniones</li>
+            </ul>
+            <button class="btn btn-block" type="button" data-interes="Escritorio Dedicado">Consultar</button>
+          </article>
+          <article class="plan plan-featured glow-border reveal" data-spot>
+            <span class="plan-flag">Más elegida</span>
+            <p class="plan-kicker mono">03</p>
+            <h3>Oficina Privada</h3>
+            <p class="plan-desc">Privacidad total para equipos que necesitan su propio espacio.</p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Oficina cerrada y equipada</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Domicilio comercial</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Asesoría administrativa</li>
+            </ul>
+            <button class="btn btn-primary btn-block" type="button" data-interes="Oficina Privada">Consultar</button>
+          </article>
+          <article class="plan glow-border reveal" data-spot>
+            <p class="plan-kicker mono">04</p>
+            <h3>Suite Corporativa</h3>
+            <p class="plan-desc">Un ala exclusiva con la identidad de tu empresa y servicios a medida.</p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Sala de reuniones propia</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Identidad de marca</li>
+              <li><svg class="i i-sm" aria-hidden="true"><use href="#i-check"/></svg> Asesoría y Gestoría integral</li>
+            </ul>
+            <button class="btn btn-block" type="button" data-interes="Suite Corporativa">Consultar</button>
+          </article>
+        </div>
+
+        <p class="plans-note reveal">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-contract"/></svg>
+          Los abonos se formalizan mediante contratos de locación de servicios de naturaleza estrictamente comercial entre partes independientes.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================ CONTACTO ============================ -->
+    <section class="section section-contact" id="contacto" aria-labelledby="contacto-title">
+      <div class="container contact-grid">
+        <div class="contact-copy reveal">
+          <p class="eyebrow">04 — Contacto</p>
+          <h2 class="section-title display" id="contacto-title">Hablemos de <span class="neon-text">tu próximo espacio.</span></h2>
+          <p class="section-lead">Dejanos tu consulta y un asesor de PARALLAX se comunicará con vos para coordinar una visita y preparar una propuesta a medida.</p>
+
+          <ul class="contact-points">
+            <li><span class="cp-icon"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg></span><div><strong>Visitas guiadas</strong><span>Coordinamos día y horario según tu disponibilidad.</span></div></li>
+            <li><span class="cp-icon"><svg class="i" aria-hidden="true"><use href="#i-contract"/></svg></span><div><strong>Propuesta a medida</strong><span>Modalidad, cantidad de puestos y servicios que realmente usás.</span></div></li>
+            <li><span class="cp-icon"><svg class="i" aria-hidden="true"><use href="#i-briefcase"/></svg></span><div><strong>Asesoría incluida</strong><span>Te orientamos en la puesta en marcha administrativa.</span></div></li>
+          </ul>
+
+          <!-- Canales de contacto: se completan en assets/js/landing.js (SITE_CONFIG) -->
+          <ul class="contact-channels" id="contact-channels" hidden></ul>
+        </div>
+
+        <div class="contact-card card glow-border reveal">
+          <form id="contact-form" class="contact-form" novalidate>
+            <div class="form-row">
+              <div class="field">
+                <label for="cf-nombre">Nombre y apellido<span class="req">*</span></label>
+                <input class="input" id="cf-nombre" name="nombre" autocomplete="name" required maxlength="120">
+              </div>
+              <div class="field">
+                <label for="cf-empresa">Empresa o actividad</label>
+                <input class="input" id="cf-empresa" name="empresa" autocomplete="organization" maxlength="120">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="cf-email">Email<span class="req">*</span></label>
+                <input class="input" id="cf-email" name="email" type="email" autocomplete="email" required maxlength="160" inputmode="email">
+              </div>
+              <div class="field">
+                <label for="cf-telefono">Teléfono</label>
+                <input class="input" id="cf-telefono" name="telefono" type="tel" autocomplete="tel" maxlength="40" inputmode="tel">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="cf-interes">Me interesa<span class="req">*</span></label>
+                <select class="select" id="cf-interes" name="interes" required>
+                  <option value="">Seleccioná una opción</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="cf-puestos">Cantidad de puestos</label>
+                <input class="input" id="cf-puestos" name="puestos" type="number" min="1" max="500" step="1" inputmode="numeric" placeholder="Ej.: 4">
+              </div>
+            </div>
+            <div class="field">
+              <label for="cf-mensaje">Mensaje<span class="req">*</span></label>
+              <textarea class="textarea" id="cf-mensaje" name="mensaje" required maxlength="2000" placeholder="Contanos sobre tu equipo y lo que estás buscando."></textarea>
+            </div>
+            <!-- Campo trampa anti-spam (oculto para personas) -->
+            <div class="hp" aria-hidden="true">
+              <label for="cf-web">Sitio web</label>
+              <input id="cf-web" name="web" tabindex="-1" autocomplete="off">
+            </div>
+            <label class="check">
+              <input type="checkbox" name="consentimiento" id="cf-consent" required>
+              <span>Acepto que PARALLAX me contacte para responder esta consulta.</span>
+            </label>
+            <p class="form-error" id="cf-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-lg btn-block" type="submit">
+              Enviar consulta <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+            </button>
+          </form>
+
+          <div class="form-success" id="contact-success" hidden tabindex="-1">
+            <div class="success-mark"><svg class="i i-lg" aria-hidden="true"><use href="#i-check"/></svg></div>
+            <h3 class="display">Consulta recibida</h3>
+            <p>Gracias, <span id="cs-nombre"></span>. Un asesor de PARALLAX se comunicará con vos a la brevedad.</p>
+            <p class="mono tiny muted">Referencia: <span id="cs-ref"></span></p>
+            <button class="btn btn-sm" type="button" id="contact-again">Enviar otra consulta</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================ FOOTER ============================ -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <a class="brand" href="#hero">
+          <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+          <span class="brand-word">PARALLAX</span>
+        </a>
+        <p class="muted small">Coworking corporativo · Infraestructura y servicios compartidos · Asesoría y Gestoría.</p>
+      </div>
+      <nav class="footer-nav" aria-label="Secciones">
+        <a href="#nosotros">Quiénes somos</a>
+        <a href="#servicios">Servicios</a>
+        <a href="#membresias">Membresías</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <a class="btn btn-sm footer-gestoria" href="gestoria.html">
+        <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Acceso Gestoría
+      </a>
+    </div>
+    <div class="container footer-legal">
+      <p>© <span id="year">2026</span> PARALLAX. Los servicios se prestan bajo contratos de locación de servicios de naturaleza estrictamente comercial.</p>
+    </div>
+  </footer>
+
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+  <script src="assets/js/core/util.js"></script>
+  <script src="assets/js/core/store.js"></script>
+  <script src="assets/js/landing.js"></script>
+</body>
+</html>
