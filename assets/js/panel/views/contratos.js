@@ -266,7 +266,7 @@
           <div class="loc-card-foot">
             <button class="btn btn-xs" data-action="editar-locatario" data-id="${l.id}">${icon('edit', 'i-sm')} Editar</button>
             <button class="btn btn-xs" data-action="contrato-para" data-id="${l.id}">${icon('plus', 'i-sm')} Contrato</button>
-            <a class="btn btn-xs" href="#/facturacion" data-action="ver-gastos" data-id="${l.id}">${icon('receipt', 'i-sm')} Gastos</a>
+            <a class="btn btn-xs" href="#facturacion" data-action="ver-gastos" data-id="${l.id}">${icon('receipt', 'i-sm')} Gastos</a>
             <button class="btn btn-xs btn-ghost" data-action="eliminar-locatario" data-id="${l.id}" aria-label="Eliminar locatario">${icon('trash', 'i-sm')}</button>
           </div>
         </article>`;
@@ -320,9 +320,9 @@
           <div class="page-actions">${btn}</div>
         </div>
         ${ui.tabs([
-          { id: 'contratos', label: 'Contratos', href: '#/contratos', n: store.all('contratos').length },
-          { id: 'locatarios', label: 'Locatarios', href: '#/contratos/locatarios', n: store.all('locatarios').length },
-          { id: 'modalidades', label: 'Modalidades de abono', href: '#/contratos/modalidades', n: store.all('planes').length }
+          { id: 'contratos', label: 'Contratos', href: '#contratos', n: store.all('contratos').length },
+          { id: 'locatarios', label: 'Locatarios', href: '#contratos-locatarios', n: store.all('locatarios').length },
+          { id: 'modalidades', label: 'Modalidades de abono', href: '#contratos-modalidades', n: store.all('planes').length }
         ], tab)}
         ${body}
         ${tab === 'contratos' ? `<div style="margin-top:16px">${LEGAL_NOTE}</div>` : ''}`;
@@ -354,7 +354,7 @@
       'ver-gastos': (el, e) => {
         const st = (PLX.app.state.facturacion = PLX.app.state.facturacion || {});
         st.locatarioId = el.dataset.id;
-        location.hash = '#/facturacion';
+        location.hash = '#facturacion';
       },
       suspender: async (el) => {
         const c = store.get('contratos', el.dataset.id);

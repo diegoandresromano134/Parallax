@@ -328,7 +328,7 @@
           </div>
         </section>
 
-        <div class="note" style="margin-top:16px">${icon('database', 'i-sm')}<div><strong>Integración contable.</strong> El CSV usa separador «;» y coma decimal, con una línea por concepto y su cuenta contable (configurable en <a href="#/configuracion" style="color:var(--cyan)">Configuración</a>). El JSON incluye la estructura completa de cada resumen para importación automatizada. Para resúmenes emitidos se exporta la versión emitida; para los pendientes, el cálculo actual sin número.</div></div>`;
+        <div class="note" style="margin-top:16px">${icon('database', 'i-sm')}<div><strong>Integración contable.</strong> El CSV usa separador «;» y coma decimal, con una línea por concepto y su cuenta contable (configurable en <a href="#configuracion" style="color:var(--cyan)">Configuración</a>). El JSON incluye la estructura completa de cada resumen para importación automatizada. Para resúmenes emitidos se exporta la versión emitida; para los pendientes, el cálculo actual sin número.</div></div>`;
     },
 
     changes: {

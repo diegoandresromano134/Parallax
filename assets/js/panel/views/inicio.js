@@ -78,21 +78,21 @@
 
       const pendientes = [
         ...porVencer.map(({ c, e }) => `
-          <a class="list-item" href="#/contratos">
+          <a class="list-item" href="#contratos">
             <span class="avatar">${icon('contract', 'i-sm')}</span>
             <div class="grow"><div class="title">${esc(h.locName(c.locatarioId))} · ${esc(c.numero)}</div>
             <div class="meta">${e.id === 'vencido' ? 'Venció' : 'Vence'} el ${util.fmtDate(c.fechaFin)} · ${esc(h.planName(c.planId))}</div></div>
             ${ui.badge(e.nombre, 'magenta', true)}
           </a>`),
         ...(sinEmitir.length ? [`
-          <a class="list-item" href="#/facturacion">
+          <a class="list-item" href="#facturacion">
             <span class="avatar">${icon('receipt', 'i-sm')}</span>
             <div class="grow"><div class="title">Resúmenes de ${util.periodLabel(pPrev)} sin emitir</div>
             <div class="meta">${sinEmitir.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
             ${ui.badge(String(sinEmitir.length), 'magenta')}
           </a>`] : []),
         ...(datosPend.length ? [`
-          <a class="list-item" href="#/contratos/locatarios">
+          <a class="list-item" href="#contratos-locatarios">
             <span class="avatar">${icon('office', 'i-sm')}</span>
             <div class="grow"><div class="title">Datos de locatarios por completar</div>
             <div class="meta" title="${esc(datosPend.map((l) => l.nombreComercial).join(', '))}">Razón social o CUIT: ${datosPend.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
@@ -101,7 +101,7 @@
       ];
 
       const demo = db.meta && db.meta.demo
-        ? `<div class="note" style="margin-bottom:16px">${icon('info', 'i-sm')}<div>Estás viendo <strong>datos de demostración</strong> (montos, personas y consumos ilustrativos). Podés editarlos, restablecerlos o comenzar con una base vacía desde <a href="#/configuracion" style="color:var(--cyan)">Configuración</a>.</div></div>`
+        ? `<div class="note" style="margin-bottom:16px">${icon('info', 'i-sm')}<div>Estás viendo <strong>datos de demostración</strong> (montos, personas y consumos ilustrativos). Podés editarlos, restablecerlos o comenzar con una base vacía desde <a href="#configuracion" style="color:var(--cyan)">Configuración</a>.</div></div>`
         : '';
 
       return `
@@ -154,7 +154,7 @@
                 <h2 class="pcard-title">${icon('users', 'i-sm')} En el espacio ahora</h2>
                 <p class="pcard-sub">${presentes.length} ${presentes.length === 1 ? 'persona autorizada' : 'personas autorizadas'} con ingreso abierto</p>
               </div>
-              <a class="btn btn-xs" href="#/accesos">Ver Control de Accesos</a>
+              <a class="btn btn-xs" href="#accesos">Ver Control de Accesos</a>
             </header>
             <div class="pcard-body flush">
               ${presentes.length ? `<div class="list">${presentes.slice(0, 7).map((a) => `
@@ -163,7 +163,7 @@
                   <div class="grow"><div class="title">${esc(a.nombre)}</div><div class="meta">${esc(h.locName(a.locatarioId))} · desde ${util.fmtTime(a.ingreso)} (${util.fmtDuration(Date.now() - new Date(a.ingreso))})</div></div>
                   <button class="btn btn-xs" data-action="egreso" data-id="${a.id}">${icon('logout', 'i-sm')} Egreso</button>
                 </div>`).join('')}
-                ${presentes.length > 7 ? `<a class="list-item muted small" href="#/accesos">y ${presentes.length - 7} más…</a>` : ''}
+                ${presentes.length > 7 ? `<a class="list-item muted small" href="#accesos">y ${presentes.length - 7} más…</a>` : ''}
               </div>` : ui.empty('No hay personas con ingreso abierto.', 'users')}
             </div>
           </section>

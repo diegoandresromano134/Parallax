@@ -363,10 +363,11 @@ body.landing {
   color: var(--text-2);
 }
 
-/* Revelado al hacer scroll (solo con JS activo) */
+/* Revelado al hacer scroll (solo con JS activo). Parte de un estado legible:
+   el contenido se ve aunque la animación no llegue a ejecutarse. */
 .js .reveal {
-  opacity: 0;
-  transform: translateY(26px);
+  opacity: 0.55;
+  transform: translateY(22px);
   transition: opacity 0.9s var(--ease), transform 0.9s var(--ease);
   transition-delay: var(--d, 0s);
 }

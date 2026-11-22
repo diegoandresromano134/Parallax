@@ -1,9 +1,9 @@
 /* ==========================================================================
    PARALLAX · Panel de Gestoría — enrutador y orquestación
    ---------------------------------------------------------------------------
-   Rutas (hash):  #/inicio · #/contratos[/locatarios|/modalidades]
-                  #/accesos[/personas] · #/consumos[/catalogo]
-                  #/facturacion · #/consultas · #/configuracion
+   Rutas (hash):  #inicio · #contratos[-locatarios|-modalidades]
+                  #accesos[-personas] · #consumos[-catalogo]
+                  #facturacion · #consultas · #configuracion
    Cada vista expone: { title, render(ctx), actions, changes, inputs }
    ========================================================================== */
 (function (root) {
@@ -24,9 +24,10 @@
   let sub = '';
 
   function parseHash() {
-    const h = (location.hash || '#/inicio').replace(/^#\/?/, '');
+    // Rutas con nombre simple (#contratos, #contratos-locatarios); acepta también el formato #/a/b
+    const h = (location.hash || '#inicio').replace(/^#\/?/, '');
     const [path] = h.split('?');
-    const parts = path.split('/').filter(Boolean);
+    const parts = path.split(/[/-]/).filter(Boolean);
     return { name: parts[0] || 'inicio', sub: parts[1] || '' };
   }
 

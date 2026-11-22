@@ -214,8 +214,8 @@
           </div>
         </div>
         ${ui.tabs([
-          { id: 'registro', label: 'Registro de consumos', href: '#/consumos' },
-          { id: 'catalogo', label: 'Catálogo de insumos', href: '#/consumos/catalogo', n: store.all('insumos').length }
+          { id: 'registro', label: 'Registro de consumos', href: '#consumos' },
+          { id: 'catalogo', label: 'Catálogo de insumos', href: '#consumos-catalogo', n: store.all('insumos').length }
         ], tab)}
         ${tab === 'registro' ? tabRegistro(st) : tabCatalogo(st)}`;
     },

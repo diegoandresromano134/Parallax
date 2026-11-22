@@ -284,8 +284,8 @@
           </div>
         </div>
         ${ui.tabs([
-          { id: 'registro', label: 'Registro de accesos', href: '#/accesos' },
-          { id: 'personas', label: 'Personas autorizadas', href: '#/accesos/personas', n: store.all('personas').length }
+          { id: 'registro', label: 'Registro de accesos', href: '#accesos' },
+          { id: 'personas', label: 'Personas autorizadas', href: '#accesos-personas', n: store.all('personas').length }
         ], tab)}
         ${tab === 'registro' ? tabRegistro(st) : tabPersonas(st)}
         <div style="margin-top:16px">${NOTA}</div>`;
