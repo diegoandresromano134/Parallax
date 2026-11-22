@@ -104,42 +104,87 @@
       }
     });
 
-    // 2) Consumos agrupados por insumo y precio unitario
-    const consumos = consumosDelPeriodo(db, locId, periodo);
-    const grupos = {};
-    consumos.forEach((c) => {
-      const ins = db.insumos.find((i) => i.id === c.insumoId) || {};
-      const cat = ins.categoria || c.categoria || 'otros';
-      const k = `${c.insumoId}|${c.precioUnitario}`;
-      if (!grupos[k]) {
-        grupos[k] = {
-          tipo: 'consumo',
-          categoria: cat,
-          categoriaNombre: domain.catNombre(cat),
-          cuenta: cfg.cuentas[cat] || '',
-          concepto: ins.nombre || c.insumoNombre || 'Insumo',
-          referencia: '',
-          detalle: '',
-          cantidad: 0,
-          unidad: ins.unidad || c.unidad || 'unidad',
-          precioUnitario: util.round2(c.precioUnitario),
-          neto: 0,
-          registros: 0
-        };
+    // 2) Recursos del contrato: unidades asignadas y cantidades incluidas en el abono
+    const contratosP = contratosDelPeriodo(db, locId, periodo);
+    const incluido = {};
+    const asignadas = new Set();
+    const asignados = [];
+    contratosP.forEach((c) => (c.recursos || []).forEach((r) => {
+      const ins = db.insumos.find((i) => i.id === r.insumoId);
+      if (!ins) return;
+      if (ins.tipo === 'unidad') {
+        asignadas.add(ins.id);
+        asignados.push({ codigo: ins.codigo || '', nombre: ins.nombre, categoria: domain.catNombre(ins.categoria), contrato: c.numero });
+      } else {
+        incluido[ins.id] = (incluido[ins.id] || 0) + (Number(r.cantidad) || 0);
       }
-      grupos[k].cantidad += Number(c.cantidad) || 0;
-      grupos[k].registros += 1;
-    });
+    }));
+
+    // 3) Consumos: primero se descuenta lo incluido en el abono; se factura el excedente
+    const restante = Object.assign({}, incluido);
+    const cubiertoPor = {};
+    const grupos = {};
+    consumosDelPeriodo(db, locId, periodo)
+      .slice()
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.creadoEn || '').localeCompare(String(b.creadoEn || '')))
+      .forEach((c) => {
+        const ins = db.insumos.find((i) => i.id === c.insumoId) || {};
+        const q = Number(c.cantidad) || 0;
+        let cubierto = 0;
+        if (asignadas.has(c.insumoId)) cubierto = q;
+        else if (restante[c.insumoId] > 0) {
+          cubierto = Math.min(q, restante[c.insumoId]);
+          restante[c.insumoId] = util.round2(restante[c.insumoId] - cubierto);
+        }
+        if (cubierto) cubiertoPor[c.insumoId] = util.round2((cubiertoPor[c.insumoId] || 0) + cubierto);
+        const cat = ins.categoria || c.categoria || 'otros';
+        const k = `${c.insumoId}|${c.precioUnitario}`;
+        if (!grupos[k]) {
+          grupos[k] = {
+            tipo: 'consumo',
+            insumoId: c.insumoId,
+            categoria: cat,
+            categoriaNombre: domain.catNombre(cat),
+            cuenta: cfg.cuentas[cat] || '',
+            concepto: (ins.nombre || c.insumoNombre || 'Recurso') + (ins.codigo ? ` · ${ins.codigo}` : ''),
+            referencia: ins.codigo || '',
+            detalle: '',
+            consumido: 0,
+            cubierto: 0,
+            cantidad: 0,
+            unidad: ins.unidad || c.unidad || 'unidad',
+            precioUnitario: util.round2(c.precioUnitario),
+            neto: 0,
+            registros: 0
+          };
+        }
+        const g = grupos[k];
+        g.consumido += q;
+        g.cubierto += cubierto;
+        g.cantidad += q - cubierto;
+        g.registros += 1;
+      });
     Object.values(grupos)
+      .filter((g) => g.cantidad > 0)
       .map((g) => Object.assign(g, {
+        consumido: util.round2(g.consumido),
+        cubierto: util.round2(g.cubierto),
         cantidad: util.round2(g.cantidad),
         neto: util.round2(g.cantidad * g.precioUnitario),
-        detalle: `${g.registros} ${g.registros === 1 ? 'registro' : 'registros'} en el período`
+        detalle: g.cubierto > 0
+          ? `Excedente: consumido ${util.num(g.consumido)} · incluido en el abono ${util.num(g.cubierto)}`
+          : `${g.registros} ${g.registros === 1 ? 'registro' : 'registros'} en el período`
       }))
       .sort((a, b) => ORDEN_CAT.indexOf(a.categoria) - ORDEN_CAT.indexOf(b.categoria) || a.concepto.localeCompare(b.concepto))
       .forEach((g) => lineas.push(g));
 
-    // 3) Uso de instalaciones (informativo)
+    // Uso de lo incluido en el abono (informativo, sin cargo)
+    const incluidos = Object.keys(incluido).map((id) => {
+      const ins = db.insumos.find((i) => i.id === id) || {};
+      return { insumoId: id, concepto: ins.nombre || 'Recurso', unidad: ins.unidad || '', incluido: incluido[id], usado: cubiertoPor[id] || 0 };
+    });
+
+    // 4) Uso de instalaciones (informativo)
     const accesos = accesosDelPeriodo(db, locId, periodo);
     const now = Date.now();
     const ms = util.sum(accesos, (a) => (a.egreso ? new Date(a.egreso) : now) - new Date(a.ingreso));
@@ -164,17 +209,20 @@
       locatario: loc
         ? {
             id: loc.id,
+            numeroCliente: loc.numeroCliente || '',
             nombreComercial: loc.nombreComercial,
             razonSocial: loc.razonSocial,
             cuit: loc.cuit,
             condicionIva: loc.condicionIva,
             domicilio: loc.domicilio,
-            email: loc.contacto && loc.contacto.email
+            email: loc.email || (loc.contacto && loc.contacto.email) || ''
           }
         : { id: locId, nombreComercial: '(locatario eliminado)', razonSocial: '' },
       prestador: Object.assign({}, cfg.prestador),
-      contratos: contratosDelPeriodo(db, locId, periodo).map((c) => c.numero),
+      contratos: contratosP.map((c) => c.numero),
       lineas,
+      asignados,
+      incluidos,
       uso: {
         ingresos: accesos.length,
         horas: util.round2(ms / 3600000),
@@ -204,7 +252,7 @@
 
   /* ---------- Exportación contable ---------- */
   const CSV_HEADER = [
-    'Período', 'Nº resumen', 'Fecha emisión', 'CUIT', 'Razón social', 'Nombre comercial', 'Condición IVA',
+    'Período', 'Nº resumen', 'Fecha emisión', 'N° cliente', 'CUIT', 'Razón social', 'Nombre comercial', 'Condición IVA',
     'Cuenta contable', 'Tipo', 'Categoría', 'Concepto', 'Detalle', 'Cantidad', 'Unidad',
     'Precio unitario', 'Importe neto', 'Alícuota IVA %', 'IVA', 'Importe total'
   ];
@@ -214,7 +262,7 @@
     return res.lineas.map((l) => {
       const iva = util.round2((l.neto * ali) / 100);
       return [
-        res.periodo, numero, fecha ? util.fmtDate(fecha) : '', util.fmtCuit(res.locatario.cuit) || '',
+        res.periodo, numero, fecha ? util.fmtDate(fecha) : '', res.locatario.numeroCliente || '', util.fmtCuit(res.locatario.cuit) || '',
         res.locatario.razonSocial, res.locatario.nombreComercial, res.locatario.condicionIva || '',
         l.cuenta, l.tipo === 'abono' ? 'Abono' : 'Consumo', l.categoriaNombre, l.concepto, l.detalle,
         util.csvNum(l.cantidad), l.unidad, util.csvNum(l.precioUnitario), util.csvNum(l.neto),
@@ -255,6 +303,8 @@
             precioUnitario: l.precioUnitario,
             neto: l.neto
           })),
+          recursosAsignados: res.asignados || [],
+          incluidosEnAbono: res.incluidos || [],
           usoInstalaciones: res.uso,
           totales: res.totales
         }))

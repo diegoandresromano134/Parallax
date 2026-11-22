@@ -8,9 +8,9 @@
 
   /* ------------------------------------------------------------------
      Configuración editable del sitio
-     · contactEndpoint: URL de una API propia que reciba las consultas
-       (POST JSON). Si queda vacía, la consulta se guarda en la base local
-       y aparece en el Panel de Gestoría de este mismo navegador.
+     · contactEndpoint: URL de un servicio externo que reciba las consultas
+       (POST JSON). Si queda vacía, la consulta va al servidor de PARALLAX
+       (server/server.js) o, en modo demostración, a este navegador.
      · canales: datos de contacto visibles; los vacíos no se muestran.
      ------------------------------------------------------------------ */
   const SITE_CONFIG = {
@@ -24,7 +24,8 @@
     }
   };
 
-  const { util, store, domain, icon } = root.PLX;
+  const PLX = root.PLX;
+  const { util, store, domain, icon } = PLX;
   const doc = document;
   const $ = (s, ctx = doc) => ctx.querySelector(s);
   const $$ = (s, ctx = doc) => Array.from(ctx.querySelectorAll(s));
@@ -301,6 +302,7 @@
     });
 
     try {
+      let rec;
       if (SITE_CONFIG.contactEndpoint) {
         const res = await fetch(SITE_CONFIG.contactEndpoint, {
           method: 'POST',
@@ -308,9 +310,13 @@
           body: JSON.stringify(consulta)
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        rec = { id: util.uid('cta') };
+      } else {
+        // Con el servidor de PARALLAX en marcha la consulta llega al panel desde cualquier dispositivo;
+        // sin servidor (demostración) queda en este navegador.
+        rec = await PLX.backend.consulta(consulta);
       }
-      const rec = store.insert('consultas', consulta, 'cta');
-      success(data, rec.id.slice(-6).toUpperCase());
+      success(data, String(rec.id).slice(-6).toUpperCase());
     } catch (err) {
       console.error(err);
       showError('No pudimos enviar tu consulta. Por favor, intentá nuevamente en unos minutos.');

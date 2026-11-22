@@ -60,7 +60,7 @@
             ${esc(p.condicionIva || '')}${p.domicilio ? `<br>${esc(p.domicilio)}` : ''}</p>
           </div>
           <div>
-            <h4>Locatario</h4>
+            <h4>Cliente${l.numeroCliente ? ` · ${esc(l.numeroCliente)}` : ''}</h4>
             <p><strong>${esc(l.razonSocial || l.nombreComercial)}</strong>${l.razonSocial && l.razonSocial !== l.nombreComercial ? `<br>${esc(l.nombreComercial)}` : ''}<br>
             ${l.cuit ? `CUIT ${esc(l.cuit)}` : '<span class="pend">CUIT pendiente de carga</span>'}${!l.razonSocial ? '<br><span class="pend">Razón social pendiente de carga</span>' : ''}<br>
             ${esc(l.condicionIva || '')}${l.domicilio ? `<br>${esc(l.domicilio)}` : ''}</p>
@@ -68,7 +68,12 @@
         </div>
 
         ${abonos.length ? `<section class="doc-section"><h5>Abonos de Membresía</h5>${lineasTabla(abonos)}</section>` : ''}
-        ${cats.map((c) => `<section class="doc-section"><h5>Consumos · ${esc(c.nombre)}</h5>${lineasTabla(consumos.filter((x) => x.categoria === c.id))}</section>`).join('')}
+        ${(res.asignados || []).length || (res.incluidos || []).length ? `<section class="doc-section"><h5>Incluido en el abono · sin cargo adicional</h5>
+          <div class="doc-incl">
+            ${(res.asignados || []).length ? `<p><span class="muted">Recursos asignados:</span> ${res.asignados.map((a) => `${esc(a.codigo ? `${a.codigo} · ` : '')}${esc(a.nombre)}`).join(', ')}</p>` : ''}
+            ${(res.incluidos || []).length ? `<p><span class="muted">Cantidades mensuales:</span> ${res.incluidos.map((x) => `${esc(x.concepto)} ${util.num(x.usado)} de ${util.num(x.incluido)} ${esc(x.unidad)}`).join(' · ')}</p>` : ''}
+          </div></section>` : ''}
+        ${cats.map((c) => `<section class="doc-section"><h5>Consumos y excedentes · ${esc(c.nombre)}</h5>${lineasTabla(consumos.filter((x) => x.categoria === c.id))}</section>`).join('')}
         ${!res.lineas.length ? `<div class="doc-section">${ui.empty('Sin abonos ni consumos en el período.', 'receipt')}</div>` : ''}
 
         <div class="doc-totals">
@@ -235,7 +240,7 @@
         <div class="page-head">
           <div>
             <h1 class="page-title">Resumen de Gastos y Facturación</h1>
-            <p class="page-sub">Consolidado mensual de abonos y consumos por locatario, listo para exportar o integrar a un programa contable.</p>
+            <p class="page-sub">Consolidado mensual por cliente: abonos, consumos y excedentes sobre lo incluido, listo para exportar o integrar a un programa contable.</p>
           </div>
           <div class="page-actions">
             <button class="btn btn-sm" data-action="export-csv" ${rows.length ? '' : 'disabled'}>${icon('download', 'i-sm')} CSV contable</button>
@@ -246,8 +251,8 @@
 
         <div class="toolbar">
           ${ui.periodNav(p)}
-          <select class="select" data-change="loc" aria-label="Filtrar por locatario">
-            <option value="">Todos los locatarios</option>
+          <select class="select" data-change="loc" aria-label="Filtrar por cliente">
+            <option value="">Todos los clientes</option>
             ${h.locOptions().map((o) => `<option value="${o.value}"${o.value === st.locatarioId ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
           </select>
           ${filtroLoc ? `<button class="btn btn-xs btn-ghost" data-action="limpiar-loc">${icon('x', 'i-sm')} Quitar filtro</button>` : ''}
@@ -265,7 +270,7 @@
         <section class="pcard">
           <header class="pcard-head">
             <div>
-              <h2 class="pcard-title">${icon('receipt', 'i-sm')} Consolidado por locatario · ${util.periodLabel(p)}</h2>
+              <h2 class="pcard-title">${icon('receipt', 'i-sm')} Consolidado por cliente · ${util.periodLabel(p)}</h2>
               <p class="pcard-sub">Importes en ARS · alícuota IVA ${util.num(store.config().ivaAlicuota)}%</p>
             </div>
           </header>
@@ -275,7 +280,7 @@
               empty: `Sin abonos ni consumos en ${util.periodLabel(p)}.`,
               emptyIcon: 'receipt',
               cols: [
-                { label: 'Locatario', primary: true, cell: ({ res, l }) => `<span class="strong">${esc(res.locatario.nombreComercial)}</span><span class="sub">${res.locatario.razonSocial ? esc(res.locatario.razonSocial) : '<span style="color:#f0a0fa">Razón social pendiente</span>'}</span>${l && !l.cuit ? '<span class="sub" style="color:#f0a0fa">CUIT pendiente</span>' : ''}` },
+                { label: 'Cliente', primary: true, cell: ({ res, l }) => `<span class="strong">${esc(res.locatario.nombreComercial)}</span><span class="sub mono">${esc(res.locatario.numeroCliente || '')}</span><span class="sub">${res.locatario.razonSocial ? esc(res.locatario.razonSocial) : '<span style="color:#f0a0fa">Razón social pendiente</span>'}</span>${l && !l.cuit ? '<span class="sub" style="color:#f0a0fa">CUIT pendiente</span>' : ''}` },
                 { label: 'Abonos', cls: 'num', cell: ({ res }) => util.money(res.totales.abonos) },
                 { label: 'Consumos', cls: 'num', cell: ({ res }) => util.money(res.totales.consumos) },
                 { label: 'Neto', cls: 'num', cell: ({ res }) => util.money(res.totales.subtotal) },
@@ -319,7 +324,7 @@
               cols: [
                 { label: 'Número', primary: true, cell: (r) => `<span class="strong mono">${esc(r.numero)}</span>${r.version > 1 ? `<span class="sub">versión ${r.version}</span>` : ''}` },
                 { label: 'Período', cell: (r) => util.periodLabel(r.periodo) },
-                { label: 'Locatario', cell: (r) => esc(r.snapshot.locatario.nombreComercial) },
+                { label: 'Cliente', cell: (r) => esc(r.snapshot.locatario.nombreComercial) },
                 { label: 'Total', cls: 'num', cell: (r) => util.money(r.total) },
                 { label: 'Emitido', cell: (r) => `<span class="small text-2">${util.fmtDateTime(r.emitidoEn)}</span>` },
                 { label: '', cls: 'actions', cell: (r) => ui.iconBtn('ver-emitido', 'eye', 'Ver documento emitido', `data-id="${r.id}"`) + ui.iconBtn('csv-emitido', 'download', 'Exportar CSV', `data-id="${r.id}"`) }

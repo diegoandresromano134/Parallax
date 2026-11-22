@@ -43,14 +43,14 @@
         <a href="#servicios" data-nav>Servicios</a>
         <a href="#membresias" data-nav>Membresías</a>
         <a href="#contacto" data-nav>Contacto</a>
-        <a href="gestoria.html" class="nav-gestoria">
-          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Acceso Gestoría
+        <a href="ingresar.html" class="nav-gestoria">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Área de Miembros · Ingresar
         </a>
       </nav>
 
       <div class="header-cta">
-        <a class="btn btn-ghost btn-sm hide-md" href="gestoria.html" title="Panel interno de Gestoría">
-          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Gestoría
+        <a class="btn btn-ghost btn-sm hide-md" href="ingresar.html" title="Área de Miembros y Panel de Gestoría">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Ingresar
         </a>
         <a class="btn btn-primary btn-sm hide-xs" href="#contacto">Agendá una visita</a>
         <button class="btn btn-icon nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Abrir menú">
@@ -383,6 +383,25 @@
       </div>
     </section>
 
+    <!-- ============================ ÁREA DE MIEMBROS ============================ -->
+    <section class="section section-club" aria-labelledby="club-title">
+      <div class="container club">
+        <div class="club-copy reveal">
+          <p class="eyebrow">Para miembros</p>
+          <h2 class="section-title display" id="club-title">Tu membresía, <span class="neon-text">en un solo lugar.</span></h2>
+          <p class="section-lead">Cada miembro de PARALLAX tiene su usuario y contraseña para ingresar al Área de Miembros: credencial digital, contrato, lo que incluye su abono, consumos del mes, resúmenes de gastos y solicitudes a recepción.</p>
+          <a class="btn btn-outline-cyan" href="ingresar.html">Ingresar al Área de Miembros <svg class="i i-sm" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+        </div>
+        <div class="club-card reveal" aria-hidden="true">
+          <div class="club-mcard">
+            <div class="club-mcard-top"><img src="assets/img/favicon.svg" alt="" width="30" height="30"><span>MIEMBRO</span></div>
+            <div class="club-mcard-num mono">CL-0000</div>
+            <div class="club-mcard-foot"><span>Oficina Privada</span><span>Desde 2026</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============================ CONTACTO ============================ -->
     <section class="section section-contact" id="contacto" aria-labelledby="contacto-title">
       <div class="container contact-grid">
@@ -482,9 +501,14 @@
         <a href="#membresias">Membresías</a>
         <a href="#contacto">Contacto</a>
       </nav>
-      <a class="btn btn-sm footer-gestoria" href="gestoria.html">
-        <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Acceso Gestoría
-      </a>
+      <div class="footer-access">
+        <a class="btn btn-sm" href="ingresar.html">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-users"/></svg> Área de Miembros
+        </a>
+        <a class="btn btn-sm btn-ghost" href="ingresar.html?siguiente=gestoria.html">
+          <svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Acceso Gestoría
+        </a>
+      </div>
     </div>
     <div class="container footer-legal">
       <p>© <span id="year">2026</span> PARALLAX. Los servicios se prestan bajo contratos de locación de servicios de naturaleza estrictamente comercial.</p>
@@ -495,6 +519,7 @@
 
   <script src="assets/js/core/util.js"></script>
   <script src="assets/js/core/store.js"></script>
+  <script src="assets/js/core/backend.js"></script>
   <script src="assets/js/landing.js"></script>
 </body>
 </html>

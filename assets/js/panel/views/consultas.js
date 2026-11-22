@@ -11,7 +11,7 @@
   const ESTADOS = {
     nueva: { label: 'Nueva', tone: 'magenta' },
     respondida: { label: 'Respondida', tone: 'cyan' },
-    convertida: { label: 'Locatario creado', tone: 'grad' },
+    convertida: { label: 'Legajo creado', tone: 'grad' },
     archivada: { label: 'Archivada', tone: 'outline' }
   };
 
@@ -27,7 +27,8 @@
             <h3>${esc(c.nombre)}</h3>
             <span class="small text-2">${esc(c.empresa || 'Sin empresa indicada')}</span>
           </div>
-          ${ui.badge(c.interes || 'Consulta general', 'outline')}
+          ${c.origen === 'miembro' ? ui.badge(`Miembro${c.locatarioId && PLX.h.loc(c.locatarioId) ? ` · ${PLX.h.loc(c.locatarioId).numeroCliente}` : ''}`, 'grad') : ''}
+          ${ui.badge(c.tipo || c.interes || 'Consulta general', 'outline')}
           ${ui.badge(e.label, e.tone, true)}
         </div>
         <p class="consulta-msg">${esc(c.mensaje)}</p>
@@ -35,12 +36,13 @@
           <span>${icon('mail', 'i-sm')} ${esc(c.email)}</span>
           ${c.telefono ? `<span>${icon('phone', 'i-sm')} ${esc(c.telefono)}</span>` : ''}
           ${c.puestos ? `<span>${icon('users', 'i-sm')} ${c.puestos} ${c.puestos === 1 ? 'puesto' : 'puestos'}</span>` : ''}
+          ${c.fechaDeseada ? `<span>${icon('calendar', 'i-sm')} Para el ${util.fmtDate(c.fechaDeseada)}</span>` : ''}
           <span>${icon('clock', 'i-sm')} ${util.fmtDateTime(c.fecha)} · ${util.relTime(c.fecha)}</span>
         </div>
         <div class="consulta-actions">
           <a class="btn btn-xs btn-outline-cyan" href="mailto:${esc(c.email)}?subject=${asunto}&body=${cuerpo}" data-action="responder" data-id="${c.id}">${icon('reply', 'i-sm')} Responder por email</a>
           ${c.estado !== 'respondida' && c.estado !== 'convertida' ? `<button class="btn btn-xs" data-action="estado" data-estado="respondida" data-id="${c.id}">${icon('check', 'i-sm')} Marcar respondida</button>` : ''}
-          ${c.estado !== 'convertida' ? `<button class="btn btn-xs" data-action="convertir" data-id="${c.id}">${icon('user-plus', 'i-sm')} Crear locatario</button>` : ''}
+          ${c.estado !== 'convertida' && c.origen !== 'miembro' ? `<button class="btn btn-xs" data-action="convertir" data-id="${c.id}">${icon('user-plus', 'i-sm')} Crear legajo</button>` : ''}
           ${c.estado !== 'archivada' ? `<button class="btn btn-xs btn-ghost" data-action="estado" data-estado="archivada" data-id="${c.id}">${icon('archive', 'i-sm')} Archivar</button>` : `<button class="btn btn-xs btn-ghost" data-action="estado" data-estado="nueva" data-id="${c.id}">${icon('refresh', 'i-sm')} Reabrir</button>`}
           <button class="btn btn-xs btn-ghost" data-action="eliminar" data-id="${c.id}" aria-label="Eliminar consulta">${icon('trash', 'i-sm')}</button>
         </div>
@@ -48,7 +50,7 @@
   }
 
   PLX.views.consultas = {
-    title: 'Consultas del sitio',
+    title: 'Consultas y solicitudes',
 
     render(ctx) {
       const st = ctx.state;
@@ -64,8 +66,8 @@
       return `
         <div class="page-head">
           <div>
-            <h1 class="page-title">Consultas del sitio</h1>
-            <p class="page-sub">Consultas enviadas desde el formulario de contacto del sitio público de PARALLAX.</p>
+            <h1 class="page-title">Consultas y solicitudes</h1>
+            <p class="page-sub">Consultas del formulario del sitio público y solicitudes enviadas por los miembros desde su Área de Miembros.</p>
           </div>
           <div class="page-actions">
             <a class="btn btn-sm" href="index.html#contacto" target="_blank" rel="noopener">${icon('external', 'i-sm')} Abrir formulario público</a>
@@ -76,7 +78,7 @@
             .map(([id, l]) => `<button type="button" class="tab${st.filtro === id ? ' is-active' : ''}" role="tab" aria-selected="${st.filtro === id}" data-action="filtro" data-f="${id}">${l} <span class="n">${by[id].length}</span></button>`).join('')}
         </nav>
         ${list.length ? `<div class="grid">${list.map(card).join('')}</div>` : `<section class="pcard">${ui.empty('No hay consultas en esta bandeja.', 'inbox')}</section>`}
-        ${!store.persistent ? '' : `<p class="small muted" style="margin-top:16px">Las consultas enviadas desde el sitio en este navegador aparecen aquí al instante, incluso con el panel abierto en otra pestaña. Para recibirlas desde cualquier dispositivo, configurá un servicio de recepción en <span class="mono">assets/js/landing.js</span> (SITE_CONFIG.contactEndpoint).</p>`}`;
+        ${PLX.backend.mode === 'servidor' ? '' : `<p class="small muted" style="margin-top:16px">Modo demostración: aparecen las consultas y solicitudes enviadas desde este navegador. Con el servidor en marcha llegan desde cualquier dispositivo.</p>`}`;
     },
 
     actions: {
@@ -93,16 +95,21 @@
       },
       convertir(el) {
         const c = store.get('consultas', el.dataset.id);
-        PLX.forms.locatario(null, {
-          nombreComercial: c.empresa || c.nombre,
-          tipo: c.puestos && c.puestos > 1 ? 'empresa' : 'profesional',
-          contactoNombre: c.nombre,
-          contactoEmail: c.email,
-          contactoTelefono: c.telefono,
+        const partes = String(c.nombre || '').trim().split(/\s+/);
+        const esEmpresa = !!(c.puestos && c.puestos > 1 && c.empresa);
+        PLX.forms.legajo(null, {
+          tipo: esEmpresa ? 'empresa' : 'profesional',
+          nombreComercial: esEmpresa ? c.empresa : '',
+          nombre: partes.slice(0, -1).join(' ') || partes[0] || '',
+          apellido: partes.length > 1 ? partes[partes.length - 1] : '',
+          email: c.email,
+          telefono: c.telefono,
+          condicionIva: esEmpresa ? 'Responsable Inscripto' : 'Monotributo',
+          habilitarTitular: true,
           notas: `Alta desde consulta del sitio (${util.fmtDate(util.localDateOfIso(c.fecha))}). Interés: ${c.interes || '—'}${c.puestos ? ` · ${c.puestos} puestos` : ''}.`,
           onCreated: (loc) => {
             store.update('consultas', c.id, { estado: 'convertida', locatarioId: loc.id });
-            setTimeout(() => ui.toast('Ahora podés crear su contrato desde Gestoría de Contratos.'), 500);
+            setTimeout(() => PLX.legajos && PLX.legajos.ficha(loc.id), 300);
           }
         });
       },

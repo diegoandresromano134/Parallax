@@ -1,123 +1,182 @@
 # PARALLAX · Coworking corporativo
 
-Aplicación web de PARALLAX, coworking de alto nivel dedicado a la provisión de infraestructura y servicios compartidos corporativos. Tiene dos interfaces:
+Aplicación web de PARALLAX, coworking de alto nivel dedicado a la provisión de infraestructura y servicios compartidos corporativos. Tiene tres interfaces:
 
 | Interfaz | Archivo | Para quién |
 |---|---|---|
-| **Sitio público** (landing de captación) | `index.html` | Personas y profesionales que todavía no conocen el coworking |
-| **Panel de Gestoría** (módulo interno) | `gestoria.html` | Equipo de PARALLAX que administra contratos, accesos, consumos y resúmenes de gastos |
+| **Sitio público** | `index.html` | Personas y profesionales que todavía no conocen el coworking |
+| **Área de Miembros** | `ingresar.html` → `miembros.html` | Clientes de PARALLAX, que ingresan con usuario y contraseña, como en un club |
+| **Panel de Gestoría** | `ingresar.html` → `gestoria.html` | Equipo de administración de PARALLAX |
 
-Está hecha con HTML, CSS y JavaScript, sin dependencias ni proceso de compilación.
+## Dos formas de usarla
 
-## Cómo abrirla
+### 1. Demostración (sin instalar nada)
 
-- **Rápido:** abrí `index.html` con doble clic en el navegador.
-- **Recomendado:** levantá un servidor local en la carpeta del proyecto y entrá a `http://localhost:8000`:
+Abrí `index.html` en el navegador. Todo funciona, pero los datos quedan **solo en ese navegador** y el inicio de sesión es ilustrativo (no es seguro). Usuarios de prueba:
 
-  ```bash
-  python3 -m http.server 8000
-  ```
+| Rol | Usuario | Contraseña |
+|---|---|---|
+| Administración | `admin` | `parallax` |
+| Miembro | `CL-0005` (o cualquier número de cliente de la demo) | `demo1234` |
 
-El panel se abre desde el enlace «Acceso Gestoría» del sitio o directamente en `gestoria.html`.
+### 2. Servidor (uso real)
 
-## Sitio público
+Hace falta [Node.js](https://nodejs.org) 18 o superior. No requiere instalar dependencias.
 
-- **Hero** con el logo y capas geométricas que se desplazan con distinta profundidad según el puntero y el scroll (efecto parallax), sobre un campo de partículas.
-- **Quiénes somos:** presentación del espacio, una comparación «oficina tradicional vs. PARALLAX» para quien no conoce el coworking y los pasos para empezar.
-- **Servicios:** infraestructura, servicios compartidos y un bloque destacado de **Asesoría y Gestoría**.
-- **Membresías:** modalidades de abono. Cada botón «Consultar» preselecciona el interés en el formulario.
-- **Contacto:** formulario validado con protección anti‑spam. Cada consulta llega a la bandeja **Consultas del sitio** del panel.
+```bash
+PARALLAX_ADMIN_PASSWORD='una-clave-segura' npm start
+# o bien: node server/server.js
+```
 
-Los datos de contacto visibles (email, teléfono, dirección, horario) y la URL de un servicio propio para recibir consultas se configuran en `SITE_CONFIG`, al inicio de `assets/js/landing.js`. Los campos que quedan vacíos no se muestran.
+Después entrá a `http://localhost:3000`. Si no definís `PARALLAX_ADMIN_PASSWORD`, el servidor crea el usuario `admin` con una contraseña aleatoria y la muestra **una sola vez** en la consola.
+
+Con el servidor en marcha:
+
+- Las contraseñas se guardan cifradas (scrypt) y la sesión viaja en una cookie `HttpOnly`.
+- Los datos son los mismos para todos los dispositivos: recepción, administración y miembros.
+- Cada miembro recibe solo su propia información y sus propios documentos.
+- Los contratos firmados y demás archivos adjuntos se guardan en el servidor.
+- Las consultas del sitio público llegan al panel desde cualquier dispositivo.
+- Los intentos de ingreso tienen límite, para frenar ataques de fuerza bruta.
+
+| Variable | Para qué sirve | Valor por defecto |
+|---|---|---|
+| `PORT` | Puerto | `3000` |
+| `PARALLAX_DATA_DIR` | Carpeta de datos (base, usuarios, archivos) | `./data` |
+| `PARALLAX_ADMIN_USER` | Usuario administrador inicial | `admin` |
+| `PARALLAX_ADMIN_PASSWORD` | Contraseña inicial del administrador | se genera y se muestra en la consola |
+| `PARALLAX_COOKIE_SECURE` | `1` para marcar la cookie como segura (obligatorio con HTTPS) | — |
+
+**Para publicarla en internet** sirve cualquier proveedor que ejecute Node.js (un VPS, Render, Railway, Fly.io, etc.). Hay tres requisitos:
+
+1. Servirla por **HTTPS** y definir `PARALLAX_COOKIE_SECURE=1`.
+2. Que la carpeta `PARALLAX_DATA_DIR` esté en un **disco persistente**.
+3. Hacer **copias de seguridad** de esa carpeta. También podés descargar un respaldo desde *Configuración → Datos y respaldo*.
+
+La carpeta `data/` está excluida del repositorio a propósito: ahí viven los datos personales y las contraseñas cifradas.
 
 ## Panel de Gestoría
 
-| Módulo | Qué resuelve |
-|---|---|
-| **Inicio** | Indicadores del mes, gastos por locatario, ingresos de los últimos 14 días, personas en el espacio, vencimientos y datos pendientes |
-| **Gestoría de Contratos** | Contratos de locación de servicios (Abonos de Membresía), alta y edición de locatarios, modalidades de abono |
-| **Control de Accesos** | Lector de credenciales (alterna ingreso y egreso), personas en el espacio, historial filtrable y exportable, personas autorizadas por cada locatario |
-| **Gestoría de Consumos** | Registro de utilería, mobiliario, papelería, otros insumos y servicios adicionales por locatario; catálogo con precios |
-| **Gastos y Facturación** | Consolidado mensual por locatario (abonos con prorrateo, consumos por categoría, IVA, total), emisión de resúmenes numerados, impresión o PDF, exportación CSV y JSON |
-| **Consultas del sitio** | Bandeja de consultas recibidas; con un clic, una consulta se convierte en locatario |
-| **Configuración** | Datos del prestador, alícuota de IVA, prorrateo, plan de cuentas, respaldo y restauración |
+El menú sigue el orden de trabajo diario.
 
-### Cuentas principales
+### Operación diaria
 
-Vienen precargadas las tres unidades de negocio que operan en el espacio:
+1. **Legajos.** La ficha de cada cliente (persona o empresa) incluye:
+   - número de cliente automático (`CL-0001`);
+   - nombre, apellido, documento y CUIT;
+   - fecha de nacimiento, con la **edad calculada sola**;
+   - teléfono, email y fecha de contrato.
 
-- **Celius Salud** · razón social Balro S.A.
-- **Nivel Salud** · razón social Care Salud S.A.
+   Desde la ficha también podés:
+   - **adjuntar el contrato firmado** y otros documentos (PDF, imagen o Word, hasta 15 MB);
+   - ver los contratos del cliente;
+   - administrar sus **personas autorizadas** con credencial;
+   - crear su **usuario y contraseña para el Área de Miembros**.
+2. **Inventario.** Todo lo que PARALLAX alquila, presta o cobra, cargado a mano:
+   - espacios: oficinas, escritorios, salas;
+   - equipos numerados: computadoras, monitores, proyectores;
+   - mobiliario: sillas, lockers;
+   - papelería: resmas, hojas impresas;
+   - otros insumos y horas adicionales.
+
+   Cada recurso tiene precio y unidad de cobro: día, mes, hora, resma, hoja, etc. Hay tres tipos:
+   - **Unidad numerada**: se asigna o se presta y se devuelve.
+   - **Consumible**: se entrega y no vuelve, con stock opcional.
+   - **Por tiempo**: horas o bloques.
+
+   «Cargar varias unidades» crea, por ejemplo, `PC-01` a `PC-06` de una vez. El estado de cada unidad se ve en vivo: disponible, asignada por contrato, en uso o en mantenimiento.
+3. **Check-in / Check-out.** Es la planilla del Control de Accesos.
+   - **Al entrar:** escribís el número de cliente o la credencial. Se registra quién ingresó y a qué hora, se le asigna un espacio (por ejemplo `ESC-07`) y se anota lo que solicita (por ejemplo `PC-03` o 2 resmas).
+   - **Al salir:** el check-out muestra cada recurso prestado para marcarlo como *Devuelto completo*, *Faltante* o *Con daños*. Podés agregar un detalle y, si corresponde, un cargo por reposición.
+   - **Si algo falta:** el registro queda *Con observaciones* hasta resolverlo.
+   - **Consumos:** lo solicitado se carga solo como consumo del cliente.
+
+### Gestoría
+
+- **Gestoría de Contratos.** Contratos de locación de servicios (Abonos de Membresía). Cada contrato elige del inventario:
+  - las **unidades asignadas** (oficina, escritorio, locker);
+  - las **cantidades incluidas por mes** (horas de sala, resmas, hojas).
+- **Gestoría de Consumos.** Todos los consumos del período, con un medidor de *usado / incluido* por cliente.
+- **Gastos y Facturación.** Consolida, por cliente y por mes:
+  - el abono, con prorrateo si el contrato empieza o termina en el mes;
+  - los consumos y **excedentes**: se descuenta primero lo incluido en el abono y se factura solo lo que se usó de más;
+  - el IVA.
+
+  Emite resúmenes numerados (`RG-AAAAMM-NNNN`) y exporta en CSV (separador `;` y coma decimal) o JSON para el programa contable. El resumen no reemplaza la factura electrónica.
+
+### Comunicación y Sistema
+
+- **Consultas y solicitudes.** Reúne:
+  - las consultas del formulario del sitio, que con un clic se convierten en un legajo;
+  - las solicitudes que envían los miembros (reservas de sala, insumos, etc.).
+- **Configuración.** Datos del prestador, alícuota de IVA, plan de cuentas, usuarios de administración, cambio de contraseña, respaldo y restauración.
+
+## Área de Miembros
+
+Cada miembro ingresa con el usuario y la contraseña que le genera la administración desde su legajo. Al ingresar ve:
+
+- **Mi membresía:** credencial digital con su número de cliente, si está en el espacio y qué tiene que devolver, su contrato, lo que incluye su abono, cuánto le queda del mes y el estimado del mes.
+- **Consumos:** lo que usó en cada período, con lo incluido y los excedentes.
+- **Resúmenes:** los resúmenes de gastos emitidos.
+- **Documentos:** su contrato firmado y la documentación compartida.
+- **Solicitudes:** pedidos a recepción, que llegan al panel.
+- **Mis datos:** su legajo; puede actualizar su teléfono y su email, y cambiar su contraseña.
+
+## Cuentas principales
+
+Las tres unidades de negocio que operan en el espacio vienen precargadas en la demostración:
+
+- **Celius Salud** · Balro S.A.
+- **Nivel Salud** · Care Salud S.A.
 - **M&C Salud** · razón social a confirmar
 
-El CUIT y los datos de contacto quedan **pendientes de carga** (el panel los señala), para no inventar información legal. Los montos, las personas autorizadas, los accesos y los consumos de la demostración son ilustrativos. Desde **Configuración → Comenzar sin datos de demostración** se vacía la base y se conservan las modalidades, el catálogo de insumos y la configuración.
+El CUIT y los datos del titular quedan **pendientes de carga**, para no inventar información legal; el panel los señala. Con el servidor, la base arranca vacía: solo trae la configuración y las modalidades de abono. El inventario de ejemplo se carga con un clic desde *Inventario*.
 
-### Naturaleza del vínculo
+## Naturaleza del vínculo
 
 Todo el sistema refleja una relación **estrictamente comercial** de locación de servicios:
 
-- PARALLAX es el *prestador* y cada empresa o profesional es un *locatario*.
-- Las personas que ingresan son *personas autorizadas* que designa cada locatario.
-- El registro de accesos existe para la seguridad de las instalaciones y para imputar el uso de la infraestructura. Cada locatario organiza su actividad con plena autonomía.
-
-## Resumen de gastos e integración contable
-
-- **Abonos:** si un contrato empieza o termina dentro del mes, el abono se prorratea por días (se puede desactivar).
-- **Consumos:** se agrupan por insumo y precio. Cada registro guarda el precio vigente al momento de cargarlo.
-- **Emisión:** congela una copia del resumen con número `RG-AAAAMM-NNNN`. Si después cambian los consumos, el resumen se marca como *Desactualizado* y se puede re-emitir conservando el número.
-- **CSV contable:** separador `;`, coma decimal y BOM UTF‑8 (abre directo en planillas configuradas en español). Tiene una línea por concepto con estas columnas: período, número, CUIT, razón social, condición frente al IVA, cuenta contable, categoría, concepto, cantidad, precio unitario, neto, alícuota, IVA y total.
-- **JSON** (`parallax.resumen-gastos.v1`): la estructura completa de cada resumen, pensada para importarla de forma automática.
-- El resumen consolida abonos y consumos, pero **no reemplaza la factura electrónica**.
-
-Plan de cuentas por defecto (se edita en Configuración): `4.1.01` Abonos de Membresía · `4.1.02` Utilería · `4.1.03` Mobiliario · `4.1.04` Papelería · `4.1.05` Otros insumos · `4.1.06` Servicios adicionales.
-
-## Datos y puesta en producción
-
-Esta versión guarda la información en el **almacenamiento local del navegador** (`localStorage`). Por eso:
-
-- cada navegador o equipo tiene su propia base, y
-- el panel **no tiene autenticación**.
-
-Para operar con varios usuarios, la capa de datos (`assets/js/core/store.js`) está aislada: alcanza con reemplazar sus funciones `read()` y `persist()` por llamadas a una API propia con inicio de sesión. El resto del sistema usa solo los métodos públicos de `store`. Mientras tanto, Configuración permite descargar y restaurar respaldos JSON.
+- PARALLAX es el prestador y cada cliente es un locatario.
+- Las personas que ingresan son *personas autorizadas* que designa cada cliente.
+- La planilla de check-in registra el uso de las instalaciones y de los recursos prestados.
+- Cada cliente organiza su actividad con plena autonomía.
 
 ## Estructura
 
 ```
-index.html                   Sitio público
-gestoria.html                Panel de Gestoría
-assets/
-  css/base.css               Sistema visual (colores, tipografías, componentes)
-  css/landing.css            Estilos del sitio público
-  css/panel.css              Estilos del panel e impresión del resumen
-  img/                       Logo (emblema y wordmark), favicon, imagen para redes
-  js/core/util.js            Formatos es-AR, fechas, CSV, validación de CUIT
-  js/core/icons.js           Íconos SVG
-  js/core/store.js           Capa de datos y constantes del dominio
-  js/core/billing.js         Motor de resumen de gastos y exportación contable
-  js/core/seed.js            Datos de demostración
-  js/landing.js              Interacción del sitio público
-  js/panel/                  Panel: interfaz, ayudantes, enrutador y módulos (views/)
+index.html · ingresar.html · miembros.html · gestoria.html
+server/server.js             Servidor (Node.js, sin dependencias)
+assets/css/                  base, landing, panel, miembros
+assets/js/core/
+  util.js                    Formatos es-AR, fechas, edad, CSV, validación de CUIT
+  store.js                   Capa de datos (operaciones locales o hacia el servidor)
+  backend.js                 Modo servidor/demostración, sesión, usuarios, archivos
+  scope.js                   Qué datos ve cada miembro (lo usan navegador y servidor)
+  billing.js                 Resumen de gastos: abonos, incluidos, excedentes, IVA
+  seed.js                    Datos de demostración e inventario de ejemplo
+  icons.js                   Íconos SVG
+assets/js/landing.js · login.js · miembros.js
+assets/js/panel/             Panel: interfaz, ayudantes, enrutador y módulos (views/)
 scripts/verificar-terminologia.sh
 ```
 
 ## Identidad visual
 
-- Fondo oscuro con textura metálica cepillada.
+- Fondo oscuro con textura metálica.
 - Acentos neón **cyan** `#3FE6F5` y **magenta** `#E04CF0`, tomados del logo.
-- Tipografías: *Michroma* para títulos (geométrica y ancha, en línea con el wordmark), *Exo 2* para el texto y *JetBrains Mono* para cifras y códigos.
-- En los gráficos se usan variantes más profundas (`#14A3B8` y `#C944E0`), validadas para contraste y daltonismo sobre el fondo oscuro.
+- Tipografías *Michroma* (títulos), *Exo 2* (texto) y *JetBrains Mono* (cifras y códigos).
 
 ## Reglas de terminología
 
-En la administración y el soporte corporativo se usa **siempre** «Asesoría» o «Gestoría». Hay términos restringidos que no pueden aparecer en ninguna parte del código, la base de datos ni la interfaz. Para comprobarlo:
+Para la administración y el soporte corporativo se usa **siempre** «Asesoría» o «Gestoría». Hay términos restringidos que no pueden aparecer en el código, los datos ni la interfaz. Para comprobarlo:
 
 ```bash
-bash scripts/verificar-terminologia.sh
+bash scripts/verificar-terminologia.sh   # o: npm run verificar
 ```
 
 El script revisa:
 
-- los términos restringidos (guardados codificados, para que el repositorio no los contenga), y
-- vocabulario propio de una relación laboral, que no corresponde a un vínculo comercial.
+- los términos restringidos (guardados codificados, así el repositorio no los contiene);
+- el vocabulario propio de una relación laboral.
 
 También corre de forma automática en cada push mediante GitHub Actions.

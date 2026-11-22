@@ -74,7 +74,8 @@
 
       const pPrev = util.shiftPeriod(p, -1);
       const sinEmitir = billing.locatariosDelPeriodo(db, pPrev).filter((l) => !billing.emitido(db, l.id, pPrev));
-      const datosPend = db.locatarios.filter((l) => !l.cuit || !l.razonSocial);
+      const datosPend = db.locatarios.filter((l) => h.datosPendientes(l).length);
+      const observados = db.accesos.filter((a) => a.estado === 'observado');
 
       const pendientes = [
         ...porVencer.map(({ c, e }) => `
@@ -91,11 +92,18 @@
             <div class="meta">${sinEmitir.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
             ${ui.badge(String(sinEmitir.length), 'magenta')}
           </a>`] : []),
+        ...(observados.length ? [`
+          <a class="list-item" href="#checkin">
+            <span class="avatar">${icon('alert', 'i-sm')}</span>
+            <div class="grow"><div class="title">Check-outs con faltantes o daños</div>
+            <div class="meta">${observados.map((a) => `${esc(a.nombre)} (${util.fmtDate(util.localDateOfIso(a.ingreso))})`).join(', ')}</div></div>
+            ${ui.badge(String(observados.length), 'magenta')}
+          </a>`] : []),
         ...(datosPend.length ? [`
-          <a class="list-item" href="#contratos-locatarios">
+          <a class="list-item" href="#legajos">
             <span class="avatar">${icon('office', 'i-sm')}</span>
             <div class="grow"><div class="title">Datos de locatarios por completar</div>
-            <div class="meta" title="${esc(datosPend.map((l) => l.nombreComercial).join(', '))}">Razón social o CUIT: ${datosPend.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
+            <div class="meta" title="${esc(datosPend.map((l) => l.nombreComercial).join(', '))}">Titular, razón social o CUIT: ${datosPend.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
             ${ui.badge(String(datosPend.length), 'outline')}
           </a>`] : [])
       ];
@@ -111,16 +119,16 @@
             <p class="page-sub">${esc(util.fmtDateLong(hoy))} · Período en curso: <strong>${util.periodLabel(p)}</strong></p>
           </div>
           <div class="page-actions">
-            <button class="btn btn-sm" data-action="nuevo-ingreso">${icon('login', 'i-sm')} Registrar ingreso</button>
+            <button class="btn btn-sm" data-action="nuevo-legajo">${icon('user-plus', 'i-sm')} Nuevo legajo</button>
             <button class="btn btn-sm" data-action="nuevo-consumo">${icon('package', 'i-sm')} Registrar consumo</button>
-            <button class="btn btn-primary btn-sm" data-action="nuevo-contrato">${icon('plus', 'i-sm')} Nuevo contrato</button>
+            <button class="btn btn-primary btn-sm" data-action="nuevo-ingreso">${icon('login', 'i-sm')} Check-in</button>
           </div>
         </div>
         ${demo}
         <div class="grid grid-kpi">
           ${ui.kpi({ label: 'Contratos vigentes', value: vigentes.length, hint: `${porVencer.length} por vencer o vencidos`, ic: 'contract' })}
           ${ui.kpi({ label: 'Abonos mensuales', value: util.money0(abonosMes), hint: 'Suma de abonos de membresía vigentes', ic: 'receipt' })}
-          ${ui.kpi({ label: 'En el espacio', value: presentes.length, hint: `${ingresosHoy} ingresos registrados hoy`, ic: 'badge' })}
+          ${ui.kpi({ label: 'En el espacio', value: presentes.length, hint: `${ingresosHoy} check-ins hoy`, ic: 'badge' })}
           ${ui.kpi({ label: 'Consumos del mes', value: util.money0(consumosMes), hint: `${regConsumo} registros en ${util.periodLabel(p)}`, ic: 'package', tone: 'magenta' })}
           ${ui.kpi({ label: 'Consultas nuevas', value: nuevas, hint: 'Recibidas desde el sitio público', ic: 'inbox', tone: 'magenta' })}
         </div>
@@ -129,7 +137,7 @@
           <section class="pcard">
             <header class="pcard-head">
               <div>
-                <h2 class="pcard-title">${icon('chart', 'i-sm')} Gastos del período por locatario</h2>
+                <h2 class="pcard-title">${icon('chart', 'i-sm')} Gastos del período por cliente</h2>
                 <p class="pcard-sub">${util.periodLabel(p)} · importes netos, sin IVA</p>
               </div>
               <div class="legend"><span><i style="background:var(--chart-1)"></i>Abono</span><span><i style="background:var(--chart-2)"></i>Consumos</span></div>
@@ -140,7 +148,7 @@
             <header class="pcard-head">
               <div>
                 <h2 class="pcard-title">${icon('pulse', 'i-sm')} Ingresos al espacio</h2>
-                <p class="pcard-sub">Últimos 14 días · registros del Control de Accesos</p>
+                <p class="pcard-sub">Últimos 14 días · check-ins de la planilla</p>
               </div>
             </header>
             <div class="pcard-body">${chartIngresos(db)}</div>
@@ -154,16 +162,16 @@
                 <h2 class="pcard-title">${icon('users', 'i-sm')} En el espacio ahora</h2>
                 <p class="pcard-sub">${presentes.length} ${presentes.length === 1 ? 'persona autorizada' : 'personas autorizadas'} con ingreso abierto</p>
               </div>
-              <a class="btn btn-xs" href="#accesos">Ver Control de Accesos</a>
+              <a class="btn btn-xs" href="#checkin">Ver planilla</a>
             </header>
             <div class="pcard-body flush">
               ${presentes.length ? `<div class="list">${presentes.slice(0, 7).map((a) => `
                 <div class="list-item">
                   <span class="avatar">${esc(util.initials(a.nombre))}</span>
-                  <div class="grow"><div class="title">${esc(a.nombre)}</div><div class="meta">${esc(h.locName(a.locatarioId))} · desde ${util.fmtTime(a.ingreso)} (${util.fmtDuration(Date.now() - new Date(a.ingreso))})</div></div>
-                  <button class="btn btn-xs" data-action="egreso" data-id="${a.id}">${icon('logout', 'i-sm')} Egreso</button>
+                  <div class="grow"><div class="title">${esc(a.nombre)}</div><div class="meta">${esc(a.numeroCliente || '')} ${esc(h.locName(a.locatarioId))} · desde ${util.fmtTime(a.ingreso)}${(a.items || []).some((x) => x.devolver) ? ` · ${a.items.filter((x) => x.devolver).length} a devolver` : ''}</div></div>
+                  <button class="btn btn-xs" data-action="egreso" data-id="${a.id}">${icon('logout', 'i-sm')} Check-out</button>
                 </div>`).join('')}
-                ${presentes.length > 7 ? `<a class="list-item muted small" href="#accesos">y ${presentes.length - 7} más…</a>` : ''}
+                ${presentes.length > 7 ? `<a class="list-item muted small" href="#checkin">y ${presentes.length - 7} más…</a>` : ''}
               </div>` : ui.empty('No hay personas con ingreso abierto.', 'users')}
             </div>
           </section>
@@ -182,13 +190,11 @@
     },
 
     actions: {
-      'nuevo-ingreso': () => PLX.forms.ingreso(),
+      'nuevo-ingreso': () => PLX.forms.checkin(),
+      'nuevo-legajo': () => PLX.forms.legajo(),
       'nuevo-consumo': () => PLX.forms.consumo(),
       'nuevo-contrato': () => PLX.forms.contrato(),
-      egreso: (el) => {
-        const r = h.registrarEgreso(el.dataset.id);
-        ui.toast(r.ok ? `Egreso registrado: ${r.acceso.nombre}` : r.motivo, r.ok ? 'ok' : 'warn');
-      }
+      egreso: (el) => PLX.forms.checkout(el.dataset.id)
     }
   };
 })(window);

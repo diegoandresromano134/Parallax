@@ -31,13 +31,20 @@
         <a class="side-link" href="#inicio" data-route="inicio">
           <svg class="i" aria-hidden="true"><use href="#i-grid"/></svg> Inicio
         </a>
+        <p class="side-label">Operación diaria</p>
+        <a class="side-link" href="#legajos" data-route="legajos">
+          <svg class="i" aria-hidden="true"><use href="#i-user"/></svg> Legajos
+        </a>
+        <a class="side-link" href="#inventario" data-route="inventario">
+          <svg class="i" aria-hidden="true"><use href="#i-layers"/></svg> Inventario
+        </a>
+        <a class="side-link" href="#checkin" data-route="checkin">
+          <svg class="i" aria-hidden="true"><use href="#i-badge"/></svg> Check-in / Check-out
+          <span class="count is-cyan" id="count-presentes" hidden></span>
+        </a>
         <p class="side-label">Gestoría</p>
         <a class="side-link" href="#contratos" data-route="contratos">
           <svg class="i" aria-hidden="true"><use href="#i-contract"/></svg> Gestoría de Contratos
-        </a>
-        <a class="side-link" href="#accesos" data-route="accesos">
-          <svg class="i" aria-hidden="true"><use href="#i-badge"/></svg> Control de Accesos
-          <span class="count is-cyan" id="count-presentes" hidden></span>
         </a>
         <a class="side-link" href="#consumos" data-route="consumos">
           <svg class="i" aria-hidden="true"><use href="#i-package"/></svg> Gestoría de Consumos
@@ -45,9 +52,9 @@
         <a class="side-link" href="#facturacion" data-route="facturacion">
           <svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg> Gastos y Facturación
         </a>
-        <p class="side-label">Captación</p>
+        <p class="side-label">Comunicación</p>
         <a class="side-link" href="#consultas" data-route="consultas">
-          <svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg> Consultas del sitio
+          <svg class="i" aria-hidden="true"><use href="#i-inbox"/></svg> Consultas y solicitudes
           <span class="count" id="count-consultas" hidden></span>
         </a>
         <p class="side-label">Sistema</p>
@@ -57,8 +64,9 @@
       </nav>
 
       <div class="sidebar-foot">
-        <span class="env-pill" id="env-pill"><span class="dot"></span><span>Datos guardados en este navegador</span></span>
+        <span class="env-pill" id="env-pill"><span class="dot"></span><span>Conectando…</span></span>
         <a href="index.html"><svg class="i i-sm" aria-hidden="true"><use href="#i-globe"/></svg> Ver sitio público</a>
+        <a href="miembros.html"><svg class="i i-sm" aria-hidden="true"><use href="#i-users"/></svg> Área de Miembros</a>
       </div>
     </aside>
     <div class="scrim" data-action-global="close-side"></div>
@@ -75,10 +83,12 @@
           <strong id="page-crumb">Inicio</strong>
         </div>
         <div class="topbar-right">
-          <a class="live-pill" href="#accesos" title="Personas en el espacio ahora">
+          <a class="live-pill" href="#checkin" title="Personas en el espacio ahora">
             <span class="pulse"></span><span id="live-presentes">0</span><span class="hide-sm">&nbsp;en el espacio</span>
           </a>
           <span class="clock" id="clock" aria-live="off"></span>
+          <span class="user-chip hide-sm" title="Sesión iniciada"><svg class="i i-sm" aria-hidden="true"><use href="#i-user"/></svg><span id="user-name"></span></span>
+          <button class="btn btn-icon btn-sm btn-ghost" type="button" data-action-global="logout" title="Cerrar sesión" aria-label="Cerrar sesión"><svg class="i i-sm" aria-hidden="true"><use href="#i-logout"/></svg></button>
         </div>
       </header>
 
@@ -93,12 +103,16 @@
   <script src="assets/js/core/util.js"></script>
   <script src="assets/js/core/store.js"></script>
   <script src="assets/js/core/billing.js"></script>
+  <script src="assets/js/core/scope.js"></script>
   <script src="assets/js/core/seed.js"></script>
+  <script src="assets/js/core/backend.js"></script>
   <script src="assets/js/panel/ui.js"></script>
   <script src="assets/js/panel/helpers.js"></script>
   <script src="assets/js/panel/views/inicio.js"></script>
+  <script src="assets/js/panel/views/legajos.js"></script>
+  <script src="assets/js/panel/views/inventario.js"></script>
+  <script src="assets/js/panel/views/checkin.js"></script>
   <script src="assets/js/panel/views/contratos.js"></script>
-  <script src="assets/js/panel/views/accesos.js"></script>
   <script src="assets/js/panel/views/consumos.js"></script>
   <script src="assets/js/panel/views/facturacion.js"></script>
   <script src="assets/js/panel/views/consultas.js"></script>

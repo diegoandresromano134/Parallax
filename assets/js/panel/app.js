@@ -1,21 +1,21 @@
 /* ==========================================================================
    PARALLAX · Panel de Gestoría — enrutador y orquestación
    ---------------------------------------------------------------------------
-   Rutas (hash):  #inicio · #contratos[-locatarios|-modalidades]
-                  #accesos[-personas] · #consumos[-catalogo]
-                  #facturacion · #consultas · #configuracion
+   Rutas (hash):  #inicio · #legajos[-personas] · #inventario · #checkin[-historial]
+                  #contratos[-modalidades] · #consumos · #facturacion
+                  #consultas · #configuracion
+   Requiere sesión de administración (ver assets/js/core/backend.js).
    Cada vista expone: { title, render(ctx), actions, changes, inputs }
    ========================================================================== */
 (function (root) {
   'use strict';
 
   const PLX = root.PLX;
-  const { util, store, ui } = PLX;
+  const { util, store, ui, backend } = PLX;
   const doc = document;
   const $ = (s) => doc.querySelector(s);
 
-  store.init({ seed: PLX.seed });
-
+  const ALIAS = { accesos: 'checkin', locatarios: 'legajos' };
   const views = PLX.views;
   const viewEl = $('#view');
   const state = {}; // estado en memoria por vista (filtros, búsqueda, período)
@@ -28,7 +28,8 @@
     const h = (location.hash || '#inicio').replace(/^#\/?/, '');
     const [path] = h.split('?');
     const parts = path.split(/[/-]/).filter(Boolean);
-    return { name: parts[0] || 'inicio', sub: parts[1] || '' };
+    const name = parts[0] || 'inicio';
+    return { name: ALIAS[name] || name, sub: parts[1] || '' };
   }
 
   function ctx() {
@@ -99,6 +100,7 @@
 
   /* ---------- Indicadores globales ---------- */
   function updateChrome() {
+    if (!backend.user) return;
     const presentes = store.all('accesos').filter((a) => !a.egreso).length;
     const nuevas = store.all('consultas').filter((c) => c.estado === 'nueva').length;
     $('#live-presentes').textContent = presentes;
@@ -117,8 +119,17 @@
   tick();
   setInterval(tick, 15000);
 
-  if (!store.persistent) {
-    $('#env-pill').innerHTML = '<span class="dot" style="background:var(--magenta)"></span><span>Almacenamiento del navegador no disponible: los cambios no se conservarán al recargar.</span>';
+  function envPill() {
+    const pill = $('#env-pill');
+    if (backend.mode === 'servidor') {
+      pill.innerHTML = '<span class="dot"></span><span>Conectado al servidor · datos compartidos</span>';
+    } else if (!store.persistent) {
+      pill.innerHTML = '<span class="dot" style="background:var(--magenta)"></span><span>Almacenamiento del navegador no disponible: los cambios no se conservarán al recargar.</span>';
+    } else {
+      pill.innerHTML = '<span class="dot" style="background:var(--magenta)"></span><span>Modo demostración · datos en este navegador</span>';
+    }
+    const u = backend.user;
+    $('#user-name').textContent = u ? (u.nombre || u.usuario) : '';
   }
 
   /* ---------- Delegación de eventos ---------- */
@@ -169,6 +180,7 @@
     const act = g.dataset.actionGlobal;
     if (act === 'open-side') doc.body.classList.add('side-open');
     if (act === 'close-side') doc.body.classList.remove('side-open');
+    if (act === 'logout') backend.logout();
   });
 
   /* ---------- Reactividad ---------- */
@@ -182,7 +194,21 @@
   }, 60000);
 
   root.addEventListener('hashchange', navigate);
-  navigate();
-
   PLX.app = { render: scheduleRender, state };
+
+  /* ---------- Arranque: sesión de administración y datos ---------- */
+  viewEl.innerHTML = '<div class="empty" style="padding:80px 0">Cargando…</div>';
+  backend.boot({ rol: 'admin', seed: PLX.seed, onSyncError: (m) => ui.toast(m, 'warn') })
+    .then((user) => {
+      if (!user) return;
+      doc.body.classList.add('is-ready');
+      envPill();
+      navigate();
+      // Cambios hechos desde otros dispositivos (servidor)
+      if (backend.mode === 'servidor') setInterval(() => { if (!doc.hidden && !$('#modal').open) backend.poll(); }, 20000);
+    })
+    .catch((e) => {
+      console.error(e);
+      viewEl.innerHTML = `<div class="empty" style="padding:80px 0">No se pudieron cargar los datos: ${util.esc(e.message)}</div>`;
+    });
 })(window);

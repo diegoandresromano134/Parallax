@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PARALLAX · Ingresar</title>
+  <meta name="description" content="Ingreso al Área de Miembros y al Panel de Gestoría de PARALLAX.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#050608">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/miembros.css">
+</head>
+<body class="auth metal">
+  <script src="assets/js/core/icons.js"></script>
+
+  <main class="auth-wrap">
+    <section class="auth-brand" aria-hidden="true">
+      <div class="auth-emblem">
+        <picture>
+          <source srcset="assets/img/parallax-emblem.webp" type="image/webp">
+          <img src="assets/img/parallax-emblem.png" alt="" width="560" height="545">
+        </picture>
+      </div>
+      <picture>
+        <source srcset="assets/img/parallax-wordmark.webp" type="image/webp">
+        <img class="auth-wordmark" src="assets/img/parallax-wordmark.png" alt="" width="878" height="100">
+      </picture>
+      <p class="auth-claim">Tu espacio de trabajo, <span class="neon-text">como un club.</span></p>
+      <ul class="auth-perks">
+        <li><svg class="i i-sm"><use href="#i-badge"/></svg> Tu credencial digital y número de cliente</li>
+        <li><svg class="i i-sm"><use href="#i-contract"/></svg> Tu contrato y lo que incluye tu abono</li>
+        <li><svg class="i i-sm"><use href="#i-receipt"/></svg> Consumos del mes y resúmenes de gastos</li>
+        <li><svg class="i i-sm"><use href="#i-calendar"/></svg> Reservas y solicitudes a recepción</li>
+      </ul>
+    </section>
+
+    <section class="auth-card card glow-border" aria-labelledby="auth-title">
+      <a class="brand auth-mobile-brand" href="index.html">
+        <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+        <span class="brand-word">PARALLAX</span>
+      </a>
+      <p class="eyebrow">Área de Miembros</p>
+      <h1 class="auth-title display" id="auth-title">Ingresar</h1>
+      <p class="auth-sub">Usá el usuario y la contraseña que te entregó PARALLAX. El equipo de administración ingresa por acá al Panel de Gestoría.</p>
+
+      <div class="auth-msg" id="auth-msg" role="status" hidden></div>
+
+      <form class="auth-form" id="login-form" novalidate>
+        <div class="field">
+          <label for="lg-usuario">Usuario</label>
+          <input class="input" id="lg-usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="Ej.: CL-0005">
+        </div>
+        <div class="field">
+          <label for="lg-pass">Contraseña</label>
+          <div class="pass-wrap">
+            <input class="input" id="lg-pass" name="password" type="password" autocomplete="current-password" required>
+            <button class="btn btn-icon btn-sm btn-ghost" type="button" id="toggle-pass" aria-label="Mostrar contraseña"><svg class="i i-sm"><use href="#i-eye"/></svg></button>
+          </div>
+        </div>
+        <p class="form-error" id="lg-error" role="alert" hidden></p>
+        <button class="btn btn-primary btn-lg btn-block" type="submit" id="lg-submit">Ingresar <svg class="i"><use href="#i-arrow-right"/></svg></button>
+      </form>
+
+      <p class="auth-help">¿Olvidaste tu contraseña? Pedí una nueva en recepción o a tu contacto de Gestoría.</p>
+
+      <div class="auth-demo" id="auth-demo" hidden>
+        <p><strong>Modo demostración.</strong> Sin servidor, el ingreso es ilustrativo y los datos quedan en este navegador. Probá con:</p>
+        <div class="demo-creds">
+          <button type="button" class="btn btn-sm" data-fill="admin">Administración · <span class="mono">admin</span> / <span class="mono">parallax</span></button>
+          <button type="button" class="btn btn-sm" data-fill="miembro">Miembro · <span class="mono">CL-0005</span> / <span class="mono">demo1234</span></button>
+        </div>
+      </div>
+
+      <a class="auth-back" href="index.html"><svg class="i i-sm"><use href="#i-chevron-left"/></svg> Volver al sitio</a>
+    </section>
+  </main>
+
+  <script src="assets/js/core/util.js"></script>
+  <script src="assets/js/core/store.js"></script>
+  <script src="assets/js/core/billing.js"></script>
+  <script src="assets/js/core/scope.js"></script>
+  <script src="assets/js/core/seed.js"></script>
+  <script src="assets/js/core/backend.js"></script>
+  <script src="assets/js/login.js"></script>
+</body>
+</html>

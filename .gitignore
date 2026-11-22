@@ -1,0 +1,4 @@
+# Datos del servidor (base, usuarios y archivos adjuntos): nunca se suben al repositorio
+data/
+node_modules/
+*.tmp

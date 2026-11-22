@@ -5,20 +5,26 @@
   'use strict';
 
   const PLX = root.PLX;
-  const { util, store, ui, domain, icon } = PLX;
+  const { util, store, ui, domain, icon, backend } = PLX;
   const esc = util.esc;
 
   PLX.views.configuracion = {
     title: 'Configuración',
 
-    render() {
+    render(ctx) {
+      const st = ctx.state;
+      if (!st._adminsAt || Date.now() - st._adminsAt > 30000) {
+        st._adminsAt = Date.now();
+        backend.users.list().then((u) => { st._admins = u.filter((x) => x.rol === 'admin'); ctx.render(); }).catch(() => {});
+      }
+      const admins = st._admins || [];
       const cfg = store.config();
       const p = cfg.prestador;
       const db = store.db;
       const counts = [
-        ['Locatarios', db.locatarios.length], ['Contratos', db.contratos.length], ['Personas autorizadas', db.personas.length],
-        ['Registros de acceso', db.accesos.length], ['Consumos', db.consumos.length], ['Resúmenes emitidos', db.resumenes.length],
-        ['Consultas', db.consultas.length]
+        ['Legajos', db.locatarios.length], ['Contratos', db.contratos.length], ['Personas autorizadas', db.personas.length],
+        ['Inventario', db.insumos.length], ['Check-ins', db.accesos.length], ['Consumos', db.consumos.length],
+        ['Resúmenes emitidos', db.resumenes.length], ['Documentos', db.documentos.length], ['Consultas', db.consultas.length]
       ];
       const kb = Math.round(new Blob([JSON.stringify(db)]).size / 1024);
 
@@ -68,8 +74,35 @@
         <section class="pcard" style="margin-top:16px">
           <header class="pcard-head">
             <div>
+              <h2 class="pcard-title">${icon('shield', 'i-sm')} Usuarios de administración</h2>
+              <p class="pcard-sub">${backend.mode === 'servidor' ? 'Contraseñas cifradas en el servidor.' : 'Modo demostración: el inicio de sesión es ilustrativo y solo vale en este navegador.'}</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-xs" data-action="mi-password">${icon('edit', 'i-sm')} Cambiar mi contraseña</button>
+              <button class="btn btn-xs btn-outline-cyan" data-action="nuevo-admin">${icon('user-plus', 'i-sm')} Nuevo administrador</button>
+            </div>
+          </header>
+          <div class="pcard-body flush">
+            ${ui.table({
+              rows: admins,
+              empty: 'Cargando usuarios…',
+              emptyIcon: 'user',
+              cols: [
+                { label: 'Usuario', primary: true, cell: (u) => `<span class="strong mono">${esc(u.usuario)}</span>${backend.user && backend.user.id === u.id ? '<span class="sub">Sesión actual</span>' : ''}` },
+                { label: 'Nombre', cell: (u) => esc(u.nombre || '—') },
+                { label: 'Último ingreso', cell: (u) => `<span class="small text-2">${u.ultimoIngreso ? util.fmtDateTime(u.ultimoIngreso) : '—'}</span>` },
+                { label: 'Estado', cell: (u) => (u.activo ? ui.badge('Habilitado', 'cyan', true) : ui.badge('Deshabilitado', 'magenta', true)) },
+                { label: '', cls: 'actions', cell: (u) => (backend.user && backend.user.id === u.id ? '' : ui.iconBtn('quitar-admin', 'trash', 'Eliminar administrador', `data-id="${u.id}"`)) }
+              ]
+            })}
+          </div>
+        </section>
+
+        <section class="pcard" style="margin-top:16px">
+          <header class="pcard-head">
+            <div>
               <h2 class="pcard-title">${icon('database', 'i-sm')} Datos y respaldo</h2>
-              <p class="pcard-sub">${store.persistent ? `Información guardada en este navegador · ${kb} KB` : 'El navegador no permite guardar datos: los cambios se pierden al recargar.'}</p>
+              <p class="pcard-sub">${backend.mode === 'servidor' ? `Información guardada en el servidor · ${kb} KB` : store.persistent ? `Modo demostración · información guardada en este navegador · ${kb} KB` : 'El navegador no permite guardar datos: los cambios se pierden al recargar.'}</p>
             </div>
           </header>
           <div class="pcard-body">
@@ -80,7 +113,7 @@
               <button class="btn btn-sm btn-danger" data-action="vaciar">${icon('refresh', 'i-sm')} Comenzar sin datos de demostración</button>
               <button class="btn btn-sm btn-ghost" data-action="demo">${icon('spark', 'i-sm')} Restablecer demostración</button>
             </div>
-            <div class="note" style="margin-top:16px">${icon('info', 'i-sm')}<div>«Comenzar sin datos de demostración» conserva la configuración, las modalidades de abono y el catálogo de insumos, y elimina locatarios, contratos, personas, accesos, consumos, resúmenes y consultas. Para operar con varios puestos de trabajo y usuarios, conectá la capa de datos (<span class="mono">assets/js/core/store.js</span>) a un servidor con autenticación.</div></div>
+            <div class="note" style="margin-top:16px">${icon('info', 'i-sm')}<div>«Comenzar sin datos de demostración» conserva la configuración, las modalidades de abono y el inventario, y elimina legajos, contratos, personas, check-ins, consumos, resúmenes, documentos y consultas. ${backend.mode === 'servidor' ? 'Los usuarios y contraseñas no se modifican.' : 'Para operar con varios dispositivos y contraseñas seguras, poné en marcha el servidor incluido (ver README).'}</div></div>
           </div>
         </section>`;
     },
@@ -102,6 +135,46 @@
         domain.CATEGORIAS.forEach((c) => (cuentas[c.id] = d[`c_${c.id}`]));
         store.setConfig({ ivaAlicuota: Number(d.ivaAlicuota), prorrateo: !!d.prorrateo, cuentas });
         ui.toast('Parámetros de facturación guardados.');
+      },
+      'mi-password'() {
+        ui.modal({
+          title: 'Cambiar mi contraseña',
+          size: 'narrow',
+          submitLabel: 'Cambiar contraseña',
+          body: ui.form([
+            { name: 'actual', label: 'Contraseña actual', type: 'password', required: true, span: 2 },
+            { name: 'nueva', label: 'Nueva contraseña', type: 'password', required: true, span: 2, hint: 'Mínimo 8 caracteres.' },
+            { name: 'repetir', label: 'Repetir nueva contraseña', type: 'password', required: true, span: 2 }
+          ]),
+          onSubmit(d) {
+            if (d.nueva !== d.repetir) { ui.toast('Las contraseñas nuevas no coinciden.', 'warn'); return false; }
+            backend.changePassword(d.actual, d.nueva).then(() => { ui.close(); ui.toast('Contraseña actualizada.'); }).catch((e) => ui.toast(e.message, 'warn'));
+            return false;
+          }
+        });
+      },
+      'nuevo-admin'(el, e, ctx) {
+        ui.modal({
+          title: 'Nuevo administrador',
+          size: 'narrow',
+          submitLabel: 'Crear usuario',
+          body: ui.form([
+            { name: 'usuario', label: 'Usuario', required: true, span: 2, cls: 'mono', maxlength: 60 },
+            { name: 'nombre', label: 'Nombre', span: 2, maxlength: 120 },
+            { name: 'password', label: 'Contraseña inicial', required: true, span: 2, cls: 'mono', value: backend.generarPassword(12), hint: 'Mínimo 8 caracteres. Copiala antes de guardar.' }
+          ]),
+          onSubmit(d) {
+            backend.users.save({ usuario: d.usuario, nombre: d.nombre, password: d.password, rol: 'admin', activo: true })
+              .then(() => { ui.close(); ui.toast(`Administrador «${d.usuario}» creado.`); ctx.state._adminsAt = 0; ctx.render(); })
+              .catch((err) => ui.toast(err.message, 'warn'));
+            return false;
+          }
+        });
+      },
+      async 'quitar-admin'(el, e, ctx) {
+        const ok = await ui.confirm({ title: 'Eliminar administrador', message: 'Ese usuario no podrá volver a ingresar al Panel de Gestoría.', confirmLabel: 'Eliminar', danger: true });
+        if (!ok) return;
+        try { await backend.users.remove(el.dataset.id); ui.toast('Administrador eliminado.'); ctx.state._adminsAt = 0; ctx.render(); } catch (err) { ui.toast(err.message, 'warn'); }
       },
       backup() {
         util.download(`parallax-respaldo-${util.todayStr()}.json`, store.exportJSON(), 'application/json');

@@ -132,6 +132,22 @@
       return d === 1 ? 'ayer' : `hace ${d} días`;
     },
 
+    /** Edad en años cumplidos a partir de una fecha AAAA-MM-DD. */
+    edad(nacimiento, hoy = new Date()) {
+      if (!nacimiento) return null;
+      const n = util.parseDate(nacimiento);
+      let e = hoy.getFullYear() - n.getFullYear();
+      const m = hoy.getMonth() - n.getMonth();
+      if (m < 0 || (m === 0 && hoy.getDate() < n.getDate())) e--;
+      return e >= 0 && e < 130 ? e : null;
+    },
+    fmtBytes(b) {
+      if (b == null) return '';
+      if (b < 1024) return `${b} B`;
+      if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`;
+      return `${(b / 1048576).toFixed(1).replace('.', ',')} MB`;
+    },
+
     /* ---------- Texto ---------- */
     esc(s) {
       return String(s == null ? '' : s)
@@ -166,6 +182,11 @@
       if (dv === 11) dv = 0;
       if (dv === 10) dv = 9;
       return dv === Number(v[10]);
+    },
+    fmtDni(s) {
+      const v = String(s || '').replace(/\D/g, '');
+      if (v.length < 7 || v.length > 8) return s || '';
+      return v.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     },
     fmtCuit(s) {
       const v = String(s || '').replace(/\D/g, '');

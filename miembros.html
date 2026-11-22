@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PARALLAX · Área de Miembros</title>
+  <meta name="description" content="Área de Miembros de PARALLAX: credencial, contrato, consumos, resúmenes y solicitudes.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#050608">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/panel.css">
+  <link rel="stylesheet" href="assets/css/miembros.css">
+</head>
+<body class="portal metal">
+  <script src="assets/js/core/icons.js"></script>
+
+  <header class="portal-top">
+    <div class="portal-top-inner">
+      <a class="brand" href="#inicio" aria-label="Área de Miembros — inicio">
+        <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+        <span class="brand-word">PARALLAX</span>
+      </a>
+      <span class="portal-tag hide-sm">Área de Miembros</span>
+      <span class="grow"></span>
+      <span class="user-chip" id="pm-user"><svg class="i i-sm" aria-hidden="true"><use href="#i-user"/></svg><span></span></span>
+      <button class="btn btn-sm btn-ghost" type="button" id="pm-logout"><svg class="i i-sm" aria-hidden="true"><use href="#i-logout"/></svg><span class="hide-sm">Salir</span></button>
+    </div>
+    <nav class="portal-nav" aria-label="Secciones del Área de Miembros">
+      <a href="#inicio" data-route="inicio">Mi membresía</a>
+      <a href="#consumos" data-route="consumos">Consumos</a>
+      <a href="#resumenes" data-route="resumenes">Resúmenes</a>
+      <a href="#documentos" data-route="documentos">Documentos</a>
+      <a href="#solicitudes" data-route="solicitudes">Solicitudes</a>
+      <a href="#datos" data-route="datos">Mis datos</a>
+    </nav>
+  </header>
+
+  <div class="portal-demo" id="pm-demo" hidden>
+    <svg class="i i-sm" aria-hidden="true"><use href="#i-info"/></svg>
+    Modo demostración: estás viendo datos de ejemplo guardados en este navegador.
+  </div>
+
+  <main class="portal-main" id="pm-view" tabindex="-1">
+    <div class="empty" style="padding:80px 0">Cargando tu membresía…</div>
+  </main>
+
+  <footer class="portal-foot">
+    <p>PARALLAX · Coworking corporativo. Servicios prestados bajo contrato de locación de servicios de naturaleza estrictamente comercial.</p>
+    <a href="index.html">Ir al sitio</a>
+  </footer>
+
+  <dialog class="modal" id="modal" aria-labelledby="modal-title"></dialog>
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+  <script src="assets/js/core/util.js"></script>
+  <script src="assets/js/core/store.js"></script>
+  <script src="assets/js/core/billing.js"></script>
+  <script src="assets/js/core/scope.js"></script>
+  <script src="assets/js/core/seed.js"></script>
+  <script src="assets/js/core/backend.js"></script>
+  <script src="assets/js/panel/ui.js"></script>
+  <script src="assets/js/miembros.js"></script>
+</body>
+</html>
