@@ -30,9 +30,9 @@ export async function discover() {
   const list = await provider.discover();
   let added = 0;
   for (const c of list) {
-    const kind = kindFor(c.name), fees = defaultFees(kind);
-    const r = db.prepare('INSERT OR IGNORE INTO competitions(ext_id, name, country, enabled, kind, entry_fee, champ_fee) VALUES (?,?,?,?,?,?,?)')
-      .run(c.ext_id, c.name, c.country, provider.DEFAULT_ENABLED.test(c.name) ? 1 : 0, kind, fees.entry_fee, fees.champ_fee);
+    const kind = kindFor(c.name), fees = defaultFees();
+    const r = db.prepare('INSERT OR IGNORE INTO competitions(ext_id, name, country, enabled, kind, entry_fee, red_fee, champ_fee) VALUES (?,?,?,?,?,?,?,?)')
+      .run(c.ext_id, c.name, c.country, provider.DEFAULT_ENABLED.test(c.name) ? 1 : 0, kind, fees.entry_fee, fees.red_fee, fees.champ_fee);
     added += Number(r.changes);
   }
   log(`torneos: ${list.length} encontrados, ${added} nuevos`);

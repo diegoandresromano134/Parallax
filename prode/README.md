@@ -10,7 +10,7 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
   pedidos de fichas, canjes, premios canjeables, carga directa, clave de la suscripción de datos, torneos y sus precios, partidos y resultados a mano, usuarios y movimientos.
   Sin esas variables (solo para probar en tu compu) el primer usuario registrado queda como admin: **no publiques la app sin configurarlas**.
 - **Fichas:** nadie arranca con fichas. Cada jugador pide fichas desde la pestaña Grupo (cantidad y mensaje) y el admin las carga o rechaza;
-  el jugador recibe un aviso. Sin fichas no se puede jugar ningún torneo. Todos los movimientos quedan registrados.
+  el jugador recibe un aviso. Los pedidos son por color (verdes, rojas o doradas). Sin fichas no se puede jugar ningún torneo. Todos los movimientos quedan registrados.
 - **Suscripción de datos:** pegá la clave en Admin → Fuente de datos y tocá *Probar conexión*. No hace falta tocar el servidor.
 
 ## Cuentas y grupos
@@ -23,21 +23,23 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 - Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
 - **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
 
-## Cómo se juega (todos los torneos igual)
-- **Sin fichas no se juega nada.** Para pronosticar los partidos de una fecha o ronda hay que anotarse **antes de que empiece**, pagando la inscripción en fichas
-  (100 por defecto, editable por torneo en Admin). Si no alcanzan las fichas, no hay inscripción y no se puede pronosticar.
-- **Pozo por fecha:** las inscripciones forman el pozo. Cuando terminan todos los partidos de la fecha, se lo lleva quien sumó más puntos
-  (3 por resultado exacto, 1 por ganador o empate). Desempata quien tuvo más exactos y luego quien erró menos goles (un partido sin pronóstico cuenta como error grande).
-  Si siguen empatados, se reparte. Si una fecha se suspende entera, se devuelven las inscripciones.
-- **Copas** (Libertadores, Sudamericana, Copa Argentina, Recopa, Supercopa) funcionan igual por ronda y suman un **pozo de campeonato** (300 por defecto) que se reparte al final
-  entre quienes acumularon más puntos. Solo cuentan los partidos que empiezan después de anotarse. **Lo cierra el admin** (Admin → Premios en juego → Cerrar y repartir).
-- Si la fuente no informa la fecha de un partido, ese partido es su propia fecha.
-- Una fecha trabada (por ejemplo, un partido postergado) la cierra el admin a mano.
-- **Canje:** las fichas se canjean por premios que define el admin (Admin → Premios para canjear: nombre, descripción y costo). El jugador canjea desde la pestaña Grupo,
-  las fichas se descuentan, y el admin marca la entrega o rechaza (y se devuelven). Los canjes pendientes suman al globito rojo del panel.
+## Cómo se juega: tres colores de fichas
+Cada jugador tiene **tres billeteras separadas por grupo**, y el admin carga cada color por pedido. Nadie arranca con fichas y **sin fichas no se juega nada**.
+Los precios de inscripción son de ejemplo (**5.000** cada una) y se cambian por torneo en Admin → Torneos → Precios de inscripción (0 = sin ese pozo).
+
+| Color | Qué es | Cómo se gana |
+|---|---|---|
+| 🟢 **Verde** | Inscripción a una **fecha o ronda** de cualquier torneo (liga o copa). Habilita pronosticar **todos** los partidos de esa fecha, con ganador y resultado exacto. Hay que anotarse **antes de que empiece la fecha**. | Gana el pozo verde quien suma más puntos (3 por exacto, 1 por ganador o empate). Desempata quien tuvo más exactos y luego quien erró menos goles. Si siguen empatados, se reparte. |
+| 🔴 **Roja** | Inscripción aparte, por fecha, para el **pozo de goles**. Hay que estar anotado en verde en esa fecha. | Gana quien acierta más **marcadores exactos**. Si nadie acierta ninguno, el pozo **pasa acumulado** a la fecha siguiente del torneo. |
+| 🟡 **Dorada** | Inscripción por **torneo** para elegir al **campeón**. Se puede cambiar la elección hasta que el admin cierre la inscripción. | Lo cierra el admin eligiendo al campeón. El pozo se reparte entre quienes acertaron; si nadie acierta, **se lo queda la casa** (queda registrado en Admin). Las elecciones ajenas se ven recién al cierre. |
+
+- Cada pozo se paga en su mismo color. Salir de una fecha antes de que empiece devuelve lo pagado (salir de verde saca también de roja). Una fecha suspendida entera devuelve las inscripciones.
+- Si la fuente no informa la fecha de un partido, ese partido es su propia fecha. Una fecha trabada (partido postergado) la cierra el admin a mano.
+- **Canje:** las fichas se canjean por premios que define el admin (nombre, descripción, costo **y color de ficha con que se paga**). El jugador canjea desde la pestaña Grupo,
+  las fichas se descuentan, y el admin marca la entrega o rechaza (y se devuelven en su color). Los canjes pendientes suman al globito rojo del panel.
 - ⚠️ **Importante:** mientras las fichas solo las carga el admin gratis (a pedido), esto es un juego entre amigos. Si alguna vez se **cobran** fichas con dinero real
   y se entregan premios de valor, pasa a ser un juego de azar/apuestas, que en Argentina está regulado. No lo hagas sin asesoramiento.
-- Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
+- Ranking → **Premios** muestra los pozos abiertos y quién va ganando en cada color. “Fichas” y “Neto” del ranking son de las verdes.
 
 ## Torneos y fixture automático
 El servidor consulta [TheSportsDB](https://www.thesportsdb.com) y detecta solo los torneos argentinos

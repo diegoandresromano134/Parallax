@@ -19,6 +19,10 @@ const fmtDay = (iso) => new Date(iso).toLocaleDateString('es-AR', { weekday: 'lo
 const fmtAgo = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'ahora' : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; };
 const dayKey = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 const group = () => S.groups.find((g) => g.id === S.gid);
+const CH = { green: { icon: '🟢', name: 'verdes', field: 'coins' }, red: { icon: '🔴', name: 'rojas', field: 'red_coins' }, gold: { icon: '🟡', name: 'doradas', field: 'gold_coins' } };
+const n$ = (n) => Number(n || 0).toLocaleString('es-AR');
+const bal = (color) => group()?.[CH[color].field] || 0;
+const colorSelect = (id, cur = 'green') => `<select class="field" id="${id}">${Object.entries(CH).map(([k, c]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${c.icon} Fichas ${c.name}</option>`).join('')}</select>`;
 
 let toastTimer;
 function toast(msg, error) {
@@ -104,7 +108,8 @@ function shell(inner) {
   const badge = (k) => (k === 'admin' && S.adminPending ? `<i class="dot">${S.adminPending}</i>` : '');
   const head = g
     ? `<div class="gsel">${S.groups.length > 1 ? `<select id="groupSel" aria-label="Grupo">${S.groups.map((x) => `<option value="${x.id}" ${x.id === S.gid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<h1>${esc(g.name)}</h1>`}</div>
-       <button class="coins" data-tab="group" title="Tus fichas en este grupo. Tocá para pedir más.">🪙 ${g.coins.toLocaleString('es-AR')}</button>`
+       <button class="wallets" data-tab="group" title="Tus fichas en este grupo. Tocá para pedir más o canjear.">
+         <span class="w g">🟢 ${n$(g.coins)}</span><span class="w r">🔴 ${n$(g.red_coins)}</span><span class="w y">🟡 ${n$(g.gold_coins)}</span></button>`
     : '<div class="gsel"><h1>🛠️ Panel de control</h1></div>';
   $app.innerHTML = `<header class="top">${head}</header><main>${inner}</main>
     <nav class="tabs">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${i}${badge(k)}</span>${l}</button>`).join('')}</nav>`;
@@ -133,10 +138,10 @@ function matchCard(m) {
     const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round), fee = m.fee, falta = fee - g.coins;
     const cta = !r ? '<div class="help">La inscripción a esta fecha todavía no está disponible.</div>'
       : !r.can_join ? '<div class="help">La fecha ya empezó: no se puede anotar.</div>'
-      : falta > 0 ? `<div class="help"><b>Te faltan ${falta} fichas</b> para anotarte (${fee} 🪙). Sin fichas no se puede jugar: <button class="link" data-tab="group">pedile fichas al admin</button>.</div>`
-      : `<button class="primary" data-join="${m.comp_id}" data-round="${esc(m.round)}">${fee ? `Anotarme a la fecha (${fee} 🪙)` : 'Anotarme (gratis)'}</button>`;
+      : falta > 0 ? `<div class="help"><b>Te faltan ${n$(falta)} fichas verdes 🟢</b> para anotarte (${n$(fee)}). Sin fichas no se puede jugar: <button class="link" data-tab="group">pedile fichas al admin</button>.</div>`
+      : `<button class="primary" data-join="${m.comp_id}" data-round="${esc(m.round)}">${fee ? `Anotarme a la fecha (${n$(fee)} 🟢)` : 'Anotarme (gratis)'}</button>`;
     return `<article class="card" data-id="${m.id}">${header}${teams('<div class="score final">- : -</div>')}
-      <div class="help" style="text-align:center">🔒 Para pronosticar tenés que anotarte a esta fecha.</div>${cta}${footer}</article>`;
+      <div class="help" style="text-align:center">🔒 Para pronosticar todos los partidos de esta fecha tenés que anotarte con fichas verdes.</div>${cta}${footer}</article>`;
   }
   return `<article class="card" data-id="${m.id}">${header}
     ${teams(`<div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
@@ -148,25 +153,37 @@ function matchCard(m) {
 function roundStrip(r) {
   const who = r.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
   let body;
-  if (r.settled) body = who ? `🏆 Ganó <b>${who}</b> el pozo de ${r.pot} 🪙${r.board.find((b) => b.user_id === S.me.id)?.payout > 0 ? ' · <span class="win">¡Fue tuyo!</span>' : ''}` : `Fecha cerrada · se devolvieron las fichas`;
-  else if (r.joined) body = `✅ Estás en el pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} ${r.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leave="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : `<small>(${r.finished}/${r.matches} partidos)</small>`}`;
-  else if (r.can_join) body = `💰 Pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} anotados <button class="mini-btn" data-join="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${r.fee} 🪙)</button>`;
-  else body = `Pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} jugadores · inscripción cerrada`;
-  return `<div class="strip">${body}</div>`;
+  if (r.settled) body = who ? `🏆 Ganó <b>${who}</b> el pozo de ${n$(r.pot)} 🟢${r.board.find((b) => b.user_id === S.me.id)?.payout > 0 ? ' · <span class="win">¡Fue tuyo!</span>' : ''}` : 'Fecha cerrada · se devolvieron las fichas';
+  else if (r.joined) body = `🟢 Estás en la fecha: pozo <b>${n$(r.pot)}</b> · ${r.players} ${r.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leave="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : `<small>(${r.finished}/${r.matches} partidos)</small>`}`;
+  else if (r.can_join) body = `🟢 Pozo de la fecha: <b>${n$(r.pot)}</b> · ${r.players} anotados <button class="mini-btn" data-join="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(r.fee)} 🟢)</button>`;
+  else body = `🟢 Pozo de la fecha: <b>${n$(r.pot)}</b> · ${r.players} jugadores · inscripción cerrada`;
+  return `<div class="strip green">${body}</div>${redStrip(r)}`;
+}
+function redStrip(r) {
+  const x = r.red; if (!x) return '';
+  const win = x.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  let body;
+  if (r.settled) body = win ? `🔴 Pozo de goles: ganó <b>${win}</b>` : `🔴 Pozo de goles: nadie acertó ningún marcador${x.carry ? ` · <b>${n$(x.carry)}</b> pasan a la próxima fecha` : ''}`;
+  else if (x.joined) body = `🔴 Estás en el pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} ${x.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leavered="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : ''}`;
+  else if (x.can_join) body = `🔴 Pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} anotados <button class="mini-btn red" data-joinred="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(x.fee)} 🔴)</button>`;
+  else if (!r.joined) return '';
+  else body = `🔴 Pozo de goles: <b>${n$(x.pot)}</b> · inscripción cerrada`;
+  return `<div class="strip red">${body}</div>`;
 }
 function champStrip(c) {
   let body;
-  if (c.closed) body = `🏆 Campeonato cerrado${c.board[0]?.payout ? ` · ganó <b>${esc(c.board[0].nick)}</b> (+${c.board[0].payout} 🪙)` : ''}`;
-  else if (c.joined) body = `✅ Estás en el campeonato: pozo <b>${c.pot} 🪙</b> · ${c.players} jugadores${c.board[0] ? ` · puntero: ${esc(c.board[0].nick)} (${c.board[0].pts} pts)` : ''}`;
-  else if (c.open) body = `🏆 Campeonato: pozo <b>${c.pot} 🪙</b> · ${c.players} anotados <button class="mini-btn" data-champ="${c.comp_id}">Anotarme (${c.fee} 🪙)</button>`;
-  else body = `Campeonato: pozo ${c.pot} 🪙 · inscripción cerrada`;
-  return `<div class="strip cup">${body}</div>`;
+  const opts = (cur) => `<select class="field team-sel" data-champsel="${c.comp_id}">${cur ? '' : '<option value="">Elegí al campeón</option>'}${c.teams.map((t) => `<option ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  if (c.closed) body = `🟡 Campeón: <b>${esc(c.champion)}</b>${c.joined ? (c.picks.find((p) => p.nick === S.me.nick)?.payout > 0 ? ' · <span class="win">¡Acertaste!</span>' : ' · no acertaste') : ''}`;
+  else if (c.joined) body = `🟡 Tu campeón: <b>${esc(c.my_pick)}</b> · pozo ${n$(c.pot)} · ${c.players} ${c.players === 1 ? 'jugador' : 'jugadores'}${c.open ? ` · cambiar: ${opts(c.my_pick)}<button class="mini-btn gold" data-champ="${c.comp_id}">Cambiar</button>` : ''}`;
+  else if (c.open) body = `🟡 ¿Quién sale campeón? Pozo <b>${n$(c.pot)}</b> · ${c.players} anotados ${opts('')}<button class="mini-btn gold" data-champ="${c.comp_id}">Elegir (${n$(c.fee)} 🟡)</button>`;
+  else body = `🟡 Campeón: pozo ${n$(c.pot)} · inscripción cerrada`;
+  return `<div class="strip gold">${body}</div>`;
 }
 
 function renderMatches() {
   const chips = [['', 'Todos'], ...S.comps.map((c) => [String(c.id), c.name])];
   const g = group();
-  let html = g.coins < 1 ? `<div class="notice"><b>No tenés fichas.</b> Sin fichas no podés participar en ningún torneo. <button class="link" data-tab="group">Pedile fichas al admin</button>.</div>` : '';
+  let html = g.coins < 1 ? `<div class="notice"><b>No tenés fichas verdes 🟢.</b> Sin fichas no podés participar en ningún torneo. <button class="link" data-tab="group">Pedile fichas al admin</button>.</div>` : '';
   html += `<div class="seg"><button data-scope="upcoming" class="${S.scope === 'upcoming' ? 'on' : ''}">Próximos</button><button data-scope="results" class="${S.scope === 'results' ? 'on' : ''}">Resultados</button></div>
     <div class="chips">${chips.map(([id, n]) => `<button class="chip ${S.comp === id ? 'on' : ''}" data-comp="${id}">${esc(n)}</button>`).join('')}</div>`;
   if (S.loading && !S.matches.length) html += '<div class="empty">Cargando…</div>';
@@ -182,7 +199,7 @@ function renderMatches() {
         const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round);
         if (r) html += `<div class="roundhead">${esc(m.comp)} · ${esc(m.round)}</div>${roundStrip(r)}`;
       }
-      if (m.kind === 'cup' && !seenCups.has(m.comp_id)) {
+      if (!seenCups.has(m.comp_id)) {
         seenCups.add(m.comp_id);
         const c = S.pots.champs.find((x) => x.comp_id === m.comp_id);
         if (c) html += champStrip(c);
@@ -231,13 +248,19 @@ async function renderPrizes() {
   shell(`${rankSeg('prizes')}<div class="empty">Cargando…</div>`);
   const pots = await api('GET', `/api/groups/${S.gid}/pots`); S.pots = pots;
   const rounds = pots.rounds.filter((r) => r.players > 0 || r.can_join).sort((a, b) => (a.settled - b.settled) || a.first_kickoff.localeCompare(b.first_kickoff));
+  const redBoard = (rows, paid) => `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Marcadores exactos</th>${paid ? '<th>Premio</th>' : ''}</tr></thead><tbody>
+    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.exact}</td>${paid ? `<td>${b.payout > 0 ? `<span class="win">+${n$(b.payout)}</span>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table>`;
   const html = `${rankSeg('prizes')}
-    <div class="box"><h3>Cómo se gana</h3><p class="help">Todos los torneos funcionan igual: cada fecha o ronda tiene un pozo. Te anotás antes de que empiece pagando la inscripción en fichas (sin fichas no se juega), pronosticás sus partidos y se lo lleva quien suma más puntos (desempata quien tuvo más resultados exactos y luego quien erró menos goles).<br>
-      <b>Copas:</b> además hay un pozo del campeonato que se reparte al final entre quienes acumularon más puntos. Las fichas que ganes las podés canjear por premios en la pestaña Grupo.</p></div>
-    ${pots.champs.map((c) => `<div class="box"><h3>🏆 ${esc(c.comp)} · campeonato</h3>${champStrip(c).replace('class="strip cup"', 'class="strip cup flat"')}
-      ${c.board.length ? board(c.board, c.closed) : '<p class="help">Todavía no hay anotados.</p>'}
-      <p class="help">Suman los partidos que empiezan después de anotarte (y en los que estés anotado a la fecha). Lo cierra el admin cuando termina el torneo.</p></div>`).join('')}
-    ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip"', 'class="strip flat"')}${r.board.length ? board(r.board, r.settled) : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
+    <div class="box"><h3>Cómo se gana</h3><p class="help">
+      <b>🟢 Verdes:</b> te anotás a una fecha o ronda y pronosticás todos sus partidos (ganador y resultado exacto). Gana el pozo verde quien suma más puntos.<br>
+      <b>🔴 Rojas:</b> inscripción aparte para el pozo de goles de esa fecha (hay que estar en verde). Gana quien acierta más marcadores exactos. Si nadie acierta ninguno, el pozo pasa acumulado a la fecha siguiente.<br>
+      <b>🟡 Doradas:</b> elegís al campeón del torneo. El pozo se reparte entre quienes aciertan; si nadie acierta, se lo queda la casa.<br>
+      Cada color es una billetera aparte y cada pozo se paga en su color. Podés canjear fichas por premios en la pestaña Grupo.</p></div>
+    ${pots.champs.map((c) => `<div class="box"><h3>🟡 ${esc(c.comp)} · campeón</h3>${champStrip(c).replace('class="strip gold"', 'class="strip gold flat"')}
+      ${c.closed && c.picks.length ? `<table class="std"><thead><tr><th>Jugador</th><th>Eligió</th><th>Premio</th></tr></thead><tbody>${c.picks.map((p) => `<tr><td><span class="who">${avatar(p, 24)}<span>${esc(p.nick)}</span></span></td><td>${esc(p.pick)}</td><td>${p.payout > 0 ? `<span class="win">+${n$(p.payout)}</span>` : '—'}</td></tr>`).join('')}</tbody></table>` : '<p class="help">Las elecciones de los demás se ven cuando se cierra el campeonato. Lo cierra el admin.</p>'}</div>`).join('')}
+    ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip green"', 'class="strip green flat"').replace('class="strip red"', 'class="strip red flat"')}
+      ${r.board.length ? `<p class="help" style="margin:4px 0">🟢 Puntos de la fecha</p>${board(r.board, r.settled)}` : ''}
+      ${r.red.board.length ? `<p class="help" style="margin:10px 0 4px">🔴 Pozo de goles</p>${redBoard(r.red.board, r.settled)}` : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
   shell(html);
 }
 
@@ -259,7 +282,7 @@ async function renderRanking() {
     ${sorted.map((p, i) => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][i] || i + 1}</td>
       <td><span class="who">${avatar(p, 28)}<span>${esc(p.nick)}${p.fav_team ? `<small>${esc(p.fav_team)}</small>` : ''}</span></span></td>
       <td>${byPts ? p.points : filtered ? `<span class="${p.net > 0 ? 'win' : p.net < 0 ? 'lose' : ''}">${sign(p.net)}</span>` : p.coins.toLocaleString('es-AR')}</td><td>${byPts ? p.exact : p.points}</td></tr>`).join('')}</tbody></table>
-    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Neto” suma lo ganado y perdido en pozos de fecha y de campeonato.'}</p>`);
+    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Fichas” y “Neto” son de las verdes.'}</p>`);
 }
 
 // ---------- tablas ----------
@@ -286,20 +309,21 @@ async function renderGroup() {
   const [reqs, rewards, reds] = await Promise.all([api('GET', `/api/groups/${g.id}/coin-requests`), api('GET', '/api/rewards'), api('GET', `/api/groups/${g.id}/redemptions`)]);
   const rst = { pending: '⏳ Pendiente de entrega', delivered: '✅ Entregado', rejected: '↩️ Devuelto' };
   const st = { pending: '⏳ Esperando al admin', approved: '✅ Aprobado', rejected: '❌ No aprobado' };
-  shell(`<div class="box"><h3>Mis fichas: 🪙 ${g.coins.toLocaleString('es-AR')}</h3>
-      <p class="help">Las fichas las carga solo el administrador, a pedido. Decile cuántas querés y se las carga cuando pueda.</p>
-      <form id="reqForm"><div class="inline two"><input class="field" name="amount" type="number" inputmode="numeric" min="10" placeholder="¿Cuántas fichas?"><button class="primary nomargin" type="submit">Pedir fichas</button></div>
-      <input class="field" name="note" maxlength="200" placeholder="Mensaje para el admin (opcional)" style="margin-top:8px"></form>
-      ${reqs.length ? `<div style="margin-top:10px">${reqs.map((r) => `<div class="row"><div>${r.amount.toLocaleString('es-AR')} fichas<small>${st[r.status]}${r.status === 'approved' && r.granted !== r.amount ? ` · te cargaron ${r.granted}` : ''}</small></div><small>${fmtAgo(r.created_at)}</small></div>`).join('')}</div>` : ''}</div>
+  shell(`<div class="box"><h3>Mis fichas</h3>
+      <div class="walletbox"><div class="w g"><b>🟢 ${n$(g.coins)}</b><small>Verdes · inscripción a fechas</small></div><div class="w r"><b>🔴 ${n$(g.red_coins)}</b><small>Rojas · pozo de goles</small></div><div class="w y"><b>🟡 ${n$(g.gold_coins)}</b><small>Doradas · campeón</small></div></div>
+      <p class="help">Cada color es una billetera aparte. Las fichas las carga solo el administrador, a pedido: decile qué color y cuántas querés.</p>
+      <form id="reqForm"><div class="inline">${colorSelect('reqColor')}<div class="inline two"><input class="field" name="amount" type="number" inputmode="numeric" min="10" placeholder="¿Cuántas fichas?"><button class="primary nomargin" type="submit">Pedir fichas</button></div>
+      <input class="field" name="note" maxlength="200" placeholder="Mensaje para el admin (opcional)"></div></form>
+      ${reqs.length ? `<div style="margin-top:10px">${reqs.map((r) => `<div class="row"><div>${n$(r.amount)} ${CH[r.color || 'green'].icon}<small>${st[r.status]}${r.status === 'approved' && r.granted !== r.amount ? ` · te cargaron ${n$(r.granted)}` : ''}</small></div><small>${fmtAgo(r.created_at)}</small></div>`).join('')}</div>` : ''}</div>
     <div class="box"><h3>🎁 Canjear fichas por premios</h3>
-      ${rewards.length ? rewards.map((r) => `<div class="row"><div>${esc(r.title)}${r.description ? `<small>${esc(r.description)}</small>` : ''}</div>
-        <button class="${g.coins >= r.cost ? 'mini-btn' : 'ghost'}" data-redeem="${r.id}" data-t="${esc(r.title)}" data-c="${r.cost}" ${g.coins >= r.cost ? '' : 'disabled'}>${r.cost.toLocaleString('es-AR')} 🪙</button></div>`).join('') : '<p class="help">El admin todavía no cargó premios para canjear.</p>'}
-      ${reds.length ? `<div style="margin-top:10px">${reds.map((r) => `<div class="row"><div>${esc(r.title)}<small>${rst[r.status]}</small></div><small>${r.cost} 🪙</small></div>`).join('')}</div>` : ''}
-      <p class="help">Las fichas se descuentan al canjear. El admin coordina la entrega con vos.</p></div>
+      ${rewards.length ? rewards.map((r) => { const ok = bal(r.color) >= r.cost; return `<div class="row"><div>${esc(r.title)}${r.description ? `<small>${esc(r.description)}</small>` : ''}</div>
+        <button class="${ok ? 'mini-btn' : 'ghost'}" data-redeem="${r.id}" data-t="${esc(r.title)}" data-c="${n$(r.cost)} ${CH[r.color].icon}" ${ok ? '' : 'disabled'}>${n$(r.cost)} ${CH[r.color].icon}</button></div>`; }).join('') : '<p class="help">El admin todavía no cargó premios para canjear.</p>'}
+      ${reds.length ? `<div style="margin-top:10px">${reds.map((r) => `<div class="row"><div>${esc(r.title)}<small>${rst[r.status]}</small></div><small>${n$(r.cost)} ${CH[r.color || 'green'].icon}</small></div>`).join('')}</div>` : ''}
+      <p class="help">Las fichas se descuentan al canjear, del color que pide cada premio. El admin coordina la entrega con vos.</p></div>
     <div class="box"><h3>Invitá a tus amigos</h3><div class="code">${esc(g.code)}</div>
       <p class="help">Pasales este código (o el link). Lo ponen al crear su cuenta o en “Unirme con un código”.</p>
       <div class="inline two"><button class="ghost" data-copy="${esc(g.code)}">Copiar código</button><button class="ghost" data-share="${esc(share)}" data-name="${esc(g.name)}">Compartir link</button></div></div>
-    <div class="box"><h3>Integrantes (${members.length})</h3>${members.map((m) => `<div class="row"><div class="who">${avatar(m, 34)}<span>${esc(m.nick)}${m.is_owner ? ' ⭐' : ''}<small>${m.fav_team ? esc(m.fav_team) + ' · ' : ''}${m.coins} fichas</small></span></div>
+    <div class="box"><h3>Integrantes (${members.length})</h3>${members.map((m) => `<div class="row"><div class="who">${avatar(m, 34)}<span>${esc(m.nick)}${m.is_owner ? ' ⭐' : ''}<small>${m.fav_team ? esc(m.fav_team) + ' · ' : ''}</small></span></div>
       ${g.is_owner && m.id !== S.me.id ? `<div><button class="ghost" data-temp="${m.id}" data-n="${esc(m.nick)}">Clave</button></div>` : ''}</div>`).join('')}</div>
     ${g.is_owner ? `<div class="box"><h3>Ajustes del grupo</h3><input class="field" id="gName" value="${esc(g.name)}" maxlength="30">${swatches('gColor', g.color)}
       <button class="primary" data-act="saveGroup">Guardar nombre y color</button><button class="ghost block" style="margin-top:8px" data-act="newCode">Generar un código nuevo</button>
@@ -355,18 +379,18 @@ async function renderAdmin() {
   const sec = (title, body, open) => `<details class="box" ${open ? 'open' : ''}><summary><b>${title}</b></summary><div style="margin-top:10px">${body}</div></details>`;
   shell(`<p class="help" style="margin:0 0 10px">Solo vos ves esta pantalla. Acá manejás las fichas, la suscripción de datos y los torneos de todos los grupos.</p>
     ${sec(`Pedidos de fichas${reqs.length ? ` (${reqs.length})` : ''}`, reqs.length ? reqs.map((r) => `<div class="req" data-rid="${r.id}">
-        <div class="who"><b>${esc(r.nick)}</b><small>${esc(r.group_name)} · tiene ${r.coins} fichas · ${fmtAgo(r.created_at)}</small></div>
+        <div class="who"><b>${esc(r.nick)} pide ${n$(r.amount)} ${CH[r.color].icon}</b><small>${esc(r.group_name)} · tiene ${n$(r.coins)} ${CH[r.color].icon} · ${fmtAgo(r.created_at)}</small></div>
         ${r.note ? `<p class="help">“${esc(r.note)}”</p>` : ''}
-        <div class="inline two" style="margin-top:6px"><input class="field" name="amt" type="number" min="1" value="${r.amount}" aria-label="Fichas a cargar"><div class="two"><button class="primary nomargin" data-act="reqOk">Cargar</button><button class="ghost" data-act="reqNo">Rechazar</button></div></div></div>`).join('') : '<p class="help">No hay pedidos pendientes.</p>', true)}
-    ${sec(`Canjes pendientes${reds.length ? ` (${reds.length})` : ''}`, reds.length ? reds.map((r) => `<div class="req" data-did="${r.id}"><div class="who"><b>${esc(r.title)}</b><small>${esc(r.nick)} · ${esc(r.group_name)} · ${r.cost} fichas · ${fmtAgo(r.created_at)}<br>${esc(r.email)}</small></div>
+        <div class="inline two" style="margin-top:6px"><input class="field" name="amt" type="number" min="1" value="${r.amount}" aria-label="Fichas ${CH[r.color].name} a cargar"><div class="two"><button class="primary nomargin" data-act="reqOk">Cargar</button><button class="ghost" data-act="reqNo">Rechazar</button></div></div></div>`).join('') : '<p class="help">No hay pedidos pendientes.</p>', true)}
+    ${sec(`Canjes pendientes${reds.length ? ` (${reds.length})` : ''}`, reds.length ? reds.map((r) => `<div class="req" data-did="${r.id}"><div class="who"><b>${esc(r.title)}</b><small>${esc(r.nick)} · ${esc(r.group_name)} · ${n$(r.cost)} ${CH[r.color].icon} · ${fmtAgo(r.created_at)}<br>${esc(r.email)}</small></div>
         <div class="two" style="margin-top:6px"><button class="primary nomargin" data-act="redOk">Marcar entregado</button><button class="ghost" data-act="redNo">Rechazar y devolver</button></div></div>`).join('') : '<p class="help">No hay canjes pendientes.</p>', reds.length > 0)}
     ${sec('Premios para canjear', `<p class="help" style="margin-top:0">Lo que definas acá aparece en la pestaña Grupo de todos los jugadores. Al canjear se descuentan las fichas.</p>
-        ${rewards.map((r) => `<div class="comprow" data-rwid="${r.id}"><div class="row"><div>${esc(r.title)}<small>${r.cost.toLocaleString('es-AR')} fichas · ${r.active ? 'visible' : 'oculto'}</small></div><input class="switch" type="checkbox" data-rw-toggle="${r.id}" ${r.active ? 'checked' : ''} aria-label="Mostrar ${esc(r.title)}"></div>
-          <details class="mini"><summary>Editar</summary><div class="inline"><input class="field" name="title" value="${esc(r.title)}" maxlength="80"><input class="field" name="description" value="${esc(r.description || '')}" placeholder="Descripción (opcional)" maxlength="300"><input class="field" name="cost" type="number" min="1" value="${r.cost}"><button class="ghost" data-act="rwSave">Guardar premio</button></div></details></div>`).join('')}
-        <h3 style="margin-top:12px">Nuevo premio</h3><div class="inline"><input class="field" id="rwTitle" placeholder="Premio (ej: Asado para dos)" maxlength="80"><input class="field" id="rwDesc" placeholder="Descripción (opcional)" maxlength="300"><input class="field" id="rwCost" type="number" min="1" placeholder="Costo en fichas"><button class="primary nomargin" data-act="rwNew">Agregar premio</button></div>`)}
+        ${rewards.map((r) => `<div class="comprow" data-rwid="${r.id}"><div class="row"><div>${esc(r.title)}<small>${n$(r.cost)} ${CH[r.color].icon} · ${r.active ? 'visible' : 'oculto'}</small></div><input class="switch" type="checkbox" data-rw-toggle="${r.id}" ${r.active ? 'checked' : ''} aria-label="Mostrar ${esc(r.title)}"></div>
+          <details class="mini"><summary>Editar</summary><div class="inline"><input class="field" name="title" value="${esc(r.title)}" maxlength="80"><input class="field" name="description" value="${esc(r.description || '')}" placeholder="Descripción (opcional)" maxlength="300"><input class="field" name="cost" type="number" min="1" value="${r.cost}"><select class="field" name="color">${Object.entries(CH).map(([k, c]) => `<option value="${k}" ${k === r.color ? 'selected' : ''}>Se paga con fichas ${c.icon} ${c.name}</option>`).join('')}</select><button class="ghost" data-act="rwSave">Guardar premio</button></div></details></div>`).join('')}
+        <h3 style="margin-top:12px">Nuevo premio</h3><div class="inline"><input class="field" id="rwTitle" placeholder="Premio (ej: Asado para dos)" maxlength="80"><input class="field" id="rwDesc" placeholder="Descripción (opcional)" maxlength="300"><input class="field" id="rwCost" type="number" min="1" placeholder="Costo en fichas"><select class="field" id="rwColor">${Object.entries(CH).map(([k, c]) => `<option value="${k}">Se paga con fichas ${c.icon} ${c.name}</option>`).join('')}</select><button class="primary nomargin" data-act="rwNew">Agregar premio</button></div>`)}
     ${sec('Cargar fichas directo', ov.groups.length ? `<div class="inline"><select class="field" id="grGroup">${ov.groups.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>
-        <select class="field" id="grUser">${g0.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (${m.coins})</option>`).join('')}</select>
-        <input class="field" id="grAmt" type="number" inputmode="numeric" placeholder="Fichas (con - para restar)"><input class="field" id="grWhy" placeholder="Motivo (opcional)" maxlength="100">
+        <select class="field" id="grUser">${g0.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (🟢${n$(m.coins)} 🔴${n$(m.red_coins)} 🟡${n$(m.gold_coins)})</option>`).join('')}</select>
+        ${colorSelect('grColor')}<input class="field" id="grAmt" type="number" inputmode="numeric" placeholder="Fichas (con - para restar)"><input class="field" id="grWhy" placeholder="Motivo (opcional)" maxlength="100">
         <button class="primary nomargin" data-act="grant">Cargar fichas</button></div>` : '<p class="help">Todavía no hay grupos.</p>')}
     ${sec('Fuente de datos (suscripción)', `<p class="help" style="margin-top:0">Estado: <b>${src.key_set ? `clave cargada ${src.hint} (${src.from})` : 'usando la clave gratuita, con límites'}</b></p>
         <input class="field" id="keyInp" type="password" autocomplete="off" placeholder="${src.key_set ? 'Pegá una clave nueva para reemplazarla' : 'Pegá acá la clave de tu suscripción'}">
@@ -374,22 +398,25 @@ async function renderAdmin() {
         ${src.key_set ? '<button class="ghost block" data-act="rmKey">Volver a la clave gratuita</button>' : ''}<div class="help" id="keyMsg"></div>
         <button class="primary" data-act="sync">🔄 Actualizar fixture ahora</button>
         <p class="help">Se actualiza solo: resultados cada 10 min, fixture cada 6 h y torneos nuevos una vez por día.</p>`)}
-    ${sec(`Premios en juego${pots.rounds.length + pots.champs.filter((c) => c.players).length ? ` (${pots.rounds.length + pots.champs.filter((c) => c.players).length})` : ''}`, `<p class="help" style="margin-top:0">Las fechas se reparten solas cuando terminan todos sus partidos. Si una quedó trabada (partido postergado), cerrala acá. El campeonato de una copa lo cerrás vos cuando termina el torneo.</p>
-        ${pots.rounds.map((r) => `<div class="row"><div>${esc(r.comp)} · ${esc(r.round)}<small>${esc(r.group_name)} · ${r.players} jugadores · pozo ${r.pot} · ${r.pending ? r.pending + ' partidos sin cerrar' : 'listo'}</small></div><button class="ghost" data-closeround="${r.group_id}|${r.comp_id}|${esc(r.round)}">Cerrar fecha</button></div>`).join('')}
-        ${pots.champs.map((c) => `<div class="row"><div>🏆 ${esc(c.comp)}<small>${c.groups} grupos · ${c.players} jugadores · pozo ${c.pot} · ${c.pending ? c.pending + ' partidos sin jugar' : 'todos los partidos jugados'}</small></div><button class="ghost" data-closecup="${c.comp_id}" data-n="${esc(c.comp)}">Cerrar y repartir</button></div>`).join('')}
+    ${sec(`Premios en juego${pots.rounds.length + pots.champs.filter((c) => c.players).length ? ` (${pots.rounds.length + pots.champs.filter((c) => c.players).length})` : ''}`, `<p class="help" style="margin-top:0">Las fechas se reparten solas cuando terminan todos sus partidos (verde y roja). Si una quedó trabada (partido postergado), cerrala acá. El pozo dorado lo cerrás vos cuando termina el torneo, eligiendo al campeón. Si nadie lo eligió, se lo queda la casa.</p>
+        ${pots.rounds.map((r) => `<div class="row"><div>${esc(r.comp)} · ${esc(r.round)}<small>${esc(r.group_name)} · ${r.players} jugadores · 🟢 ${n$(r.pot)}${r.red_players ? ` · 🔴 ${r.red_players} anotados` : ''} · ${r.pending ? r.pending + ' partidos sin cerrar' : 'listo'}</small></div><button class="ghost" data-closeround="${r.group_id}|${r.comp_id}|${esc(r.round)}">Cerrar fecha</button></div>`).join('')}
+        ${pots.champs.map((c) => `<div class="req"><div class="who"><b>🟡 ${esc(c.comp)}</b><small>${c.groups} grupos · ${c.players} jugadores · pozo ${n$(c.pot)} · ${c.pending ? c.pending + ' partidos sin jugar' : 'todos los partidos jugados'}</small></div>
+          <div class="inline two" style="margin-top:6px"><select class="field" data-champwin="${c.comp_id}"><option value="">¿Quién salió campeón?</option>${c.teams.map((t) => `<option>${esc(t)}</option>`).join('')}</select><button class="ghost" data-closecup="${c.comp_id}" data-n="${esc(c.comp)}">Cerrar y repartir</button></div></div>`).join('')}
+        ${pots.house && pots.house.length ? `<h3 style="margin-top:12px">Se quedó la casa</h3>${pots.house.map((h) => `<div class="row"><div>${esc(h.group_name)}<small>${esc(h.reason)}</small></div><b>${n$(h.amount)} ${CH[h.color].icon}</b></div>`).join('')}` : ''}
         ${pots.rounds.length + pots.champs.length ? '' : '<p class="help">No hay pozos abiertos.</p>'}`, pots.champs.some((c) => c.pending === 0 && c.players))}
-    ${sec('Torneos', `${comps.length ? comps.map((c) => `<div class="comprow" data-cid="${c.id}"><div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos · ${c.kind === 'cup' ? 'copa' : 'liga'}</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>
-        <details class="mini"><summary>Premios de este torneo</summary><div class="inline two"><label class="l">Tipo<select class="field" name="kind"><option value="league" ${c.kind === 'league' ? 'selected' : ''}>Liga (pozo por fecha)</option><option value="cup" ${c.kind === 'cup' ? 'selected' : ''}>Copa (por partido + campeonato)</option></select></label>
-        <label class="l">Inscripción por fecha<input class="field" name="entry_fee" type="number" min="0" value="${c.entry_fee}"></label>
-        <label class="l">Inscripción campeonato<input class="field" name="champ_fee" type="number" min="0" value="${c.champ_fee}"></label>
-        <label class="l">Campeonato<select class="field" name="champ_open"><option value="1" ${c.champ_open ? 'selected' : ''}>Inscripción abierta</option><option value="0" ${c.champ_open ? '' : 'selected'}>Cerrada</option></select></label></div>
-        <button class="ghost block" data-act="saveComp">Guardar premios</button><p class="help">0 = sin pozo. En ligas se usa “por fecha”; en copas, “campeonato”.</p></details></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
-        <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><select class="field" id="newKind"><option value="cup">Copa</option><option value="league">Liga</option></select></div><button class="ghost block" data-act="addComp">Crear torneo</button>`)}
+    ${sec('Torneos', `${comps.length ? comps.map((c) => `<div class="comprow" data-cid="${c.id}"><div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos · 🟢${n$(c.entry_fee)} 🔴${n$(c.red_fee)} 🟡${n$(c.champ_fee)}</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>
+        <details class="mini"><summary>Precios de inscripción de este torneo</summary><div class="inline">
+        <label class="l">🟢 Verde: fecha completa<input class="field" name="entry_fee" type="number" min="0" value="${c.entry_fee}"></label>
+        <label class="l">🔴 Roja: pozo de goles por fecha<input class="field" name="red_fee" type="number" min="0" value="${c.red_fee}"></label>
+        <label class="l">🟡 Dorada: elegir campeón<input class="field" name="champ_fee" type="number" min="0" value="${c.champ_fee}"></label>
+        <label class="l">Inscripción dorada<select class="field" name="champ_open"><option value="1" ${c.champ_open ? 'selected' : ''}>Abierta</option><option value="0" ${c.champ_open ? '' : 'selected'}>Cerrada</option></select></label></div>
+        <button class="ghost block" data-act="saveComp">Guardar precios</button><p class="help">0 = sin ese pozo. Valores de ejemplo: 5.000 cada una.</p></details></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
+        <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><button class="ghost" data-act="addComp">Crear torneo</button></div>`)}
     ${sec('Cargar partidos y resultados a mano', `<div class="inline"><select class="field" id="mComp">${comps.filter((c) => c.enabled).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
         <div class="inline two"><input class="field" id="mHome" placeholder="Local"><input class="field" id="mAway" placeholder="Visitante"></div><input class="field" id="mRound" placeholder="Fecha (ej: Fecha 3)"><input class="field" id="mWhen" type="datetime-local"><button class="ghost" data-act="addMatch">Agregar partido</button></div>
         <h3 style="margin-top:14px">Esperando resultado</h3>${pending.length ? pending.map((m) => `<div class="row" data-mid="${m.id}"><div>${esc(m.home)} vs ${esc(m.away)}<small>${esc(m.comp)}</small></div><div><input class="mini" data-r="h" type="number" min="0" aria-label="Goles local"> <input class="mini" data-r="a" type="number" min="0" aria-label="Goles visitante"> <button class="ghost" data-act="result">OK</button></div></div>`).join('') : '<p class="help">No hay partidos esperando resultado.</p>'}`)}
     ${sec(`Usuarios (${users.length})`, users.map((u) => `<div class="row"><div>${esc(u.nick)}${u.is_admin ? ' ⭐' : ''}<small>${esc(u.first_name)} ${esc(u.last_name)} · ${esc(u.email)}<br>${esc(u.groups || 'sin grupo')}</small></div>${u.is_admin ? '' : `<button class="ghost" data-upass="${u.id}" data-n="${esc(u.nick)}">Clave</button>`}</div>`).join(''))}
-    ${sec('Últimos movimientos de fichas', ledger.length ? ledger.map((l) => `<div class="row"><div>${esc(l.nick)} · ${esc(l.group_name)}<small>${esc(l.reason || '')} · ${fmtAgo(l.created_at)}</small></div><b class="${l.amount > 0 ? 'win' : 'lose'}">${l.amount > 0 ? '+' : ''}${l.amount}</b></div>`).join('') : '<p class="help">Todavía no cargaste fichas.</p>')}`);
+    ${sec('Últimos movimientos de fichas', ledger.length ? ledger.map((l) => `<div class="row"><div>${esc(l.nick)} · ${esc(l.group_name)}<small>${esc(l.reason || '')} · ${fmtAgo(l.created_at)}</small></div><b class="${l.amount > 0 ? 'win' : 'lose'}">${l.amount > 0 ? '+' : ''}${n$(l.amount)} ${CH[l.color || 'green'].icon}</b></div>`).join('') : '<p class="help">Todavía no cargaste fichas.</p>')}`);
 }
 
 // ---------- dispatcher ----------
@@ -434,7 +461,7 @@ document.addEventListener('submit', async (e) => {
       try { await api('POST', '/api/me/password', f); form.reset(); toast('Contraseña cambiada'); document.getElementById('wErr').textContent = ''; }
       catch (x) { document.getElementById('wErr').textContent = x.message; }
     } else if (form.id === 'reqForm') {
-      await api('POST', `/api/groups/${S.gid}/coin-requests`, { amount: Number(f.amount), note: f.note });
+      await api('POST', `/api/groups/${S.gid}/coin-requests`, { amount: Number(f.amount), note: f.note, color: document.getElementById('reqColor').value });
       toast('Pedido enviado al admin'); render();
     } else if (form.classList.contains('msgform')) {
       const id = form.dataset.id; if (!f.body.trim()) return;
@@ -452,7 +479,7 @@ document.addEventListener('change', async (e) => {
     if (t.id === 'groupSel') { S.gid = Number(t.value); store.set('gid', S.gid); S.matches = []; S.plays = {}; S.threads = {}; S.comp = ''; render(); }
     else if (t.id === 'grGroup') {
       const gr = S.admin.groups.find((x) => x.id === Number(t.value));
-      document.getElementById('grUser').innerHTML = gr.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (${m.coins})</option>`).join('');
+      document.getElementById('grUser').innerHTML = gr.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (🟢${n$(m.coins)} 🔴${n$(m.red_coins)} 🟡${n$(m.gold_coins)})</option>`).join('');
     } else if (t.id === 'rkComp') { S.rank.comp = t.value; S.rank.round = ''; renderRanking(); }
     else if (t.id === 'rkRound') { S.rank.round = t.value; renderRanking(); }
     else if (t.id === 'photo' && t.files[0]) {
@@ -523,27 +550,36 @@ document.addEventListener('click', async (e) => {
     }
     if (t.dataset.act === 'rwNew') {
       const v = (id) => document.getElementById(id).value;
-      await api('POST', '/api/admin/rewards', { title: v('rwTitle'), description: v('rwDesc'), cost: Number(v('rwCost')) }); toast('Premio agregado'); return render();
+      await api('POST', '/api/admin/rewards', { title: v('rwTitle'), description: v('rwDesc'), cost: Number(v('rwCost')), color: v('rwColor') }); toast('Premio agregado'); return render();
     }
     if (t.dataset.act === 'rwSave') {
       const row = t.closest('[data-rwid]'), v = (n) => row.querySelector(`[name=${n}]`).value;
-      await api('PATCH', `/api/admin/rewards/${row.dataset.rwid}`, { title: v('title'), description: v('description'), cost: Number(v('cost')) }); toast('Premio guardado'); return render();
+      await api('PATCH', `/api/admin/rewards/${row.dataset.rwid}`, { title: v('title'), description: v('description'), cost: Number(v('cost')), color: v('color') }); toast('Premio guardado'); return render();
     }
     if (t.dataset.join) { await api('POST', `/api/groups/${S.gid}/rounds/join`, { comp_id: Number(t.dataset.join), round: t.dataset.round }); toast('¡Anotado en la fecha!'); return loadMatches(); }
     if (t.dataset.leave) { await api('POST', `/api/groups/${S.gid}/rounds/leave`, { comp_id: Number(t.dataset.leave), round: t.dataset.round }); toast('Inscripción devuelta'); return loadMatches(); }
-    if (t.dataset.champ) { await api('POST', `/api/groups/${S.gid}/champs/${t.dataset.champ}/join`, {}); toast('¡Anotado en el campeonato!'); return loadMatches(); }
+    if (t.dataset.joinred) { await api('POST', `/api/groups/${S.gid}/rounds/join-red`, { comp_id: Number(t.dataset.joinred), round: t.dataset.round }); toast('¡Anotado en el pozo de goles!'); return loadMatches(); }
+    if (t.dataset.leavered) { await api('POST', `/api/groups/${S.gid}/rounds/leave-red`, { comp_id: Number(t.dataset.leavered), round: t.dataset.round }); toast('Inscripción roja devuelta'); return loadMatches(); }
+    if (t.dataset.champ) {
+      const sel = document.querySelector(`[data-champsel="${t.dataset.champ}"]`);
+      if (!sel || !sel.value) throw new Error('Elegí un equipo');
+      const r = await api('POST', `/api/groups/${S.gid}/champs/${t.dataset.champ}/join`, { pick: sel.value });
+      toast(r.changed ? 'Elección cambiada' : '¡Elegiste a tu campeón!'); return S.tab === 'ranking' ? renderPrizes() : loadMatches();
+    }
     if (t.dataset.closeround) {
       const [gid, cid, ...r] = t.dataset.closeround.split('|');
       if (!confirm('¿Cerrar esta fecha y repartir el pozo con los partidos ya jugados?')) return;
       await api('POST', '/api/admin/rounds/close', { group_id: Number(gid), comp_id: Number(cid), round: r.join('|') }); toast('Fecha cerrada'); return render();
     }
     if (t.dataset.closecup) {
-      if (!confirm(`¿Cerrar "${t.dataset.n}" y repartir el pozo del campeonato en todos los grupos? No se puede deshacer.`)) return;
-      await api('POST', `/api/admin/competitions/${t.dataset.closecup}/close`, {}); toast('Campeonato cerrado y premios repartidos'); return render();
+      const champion = document.querySelector(`[data-champwin="${t.dataset.closecup}"]`).value;
+      if (!champion) throw new Error('Elegí quién salió campeón');
+      if (!confirm(`¿Cerrar "${t.dataset.n}" con ${champion} como campeón y repartir el pozo dorado en todos los grupos? No se puede deshacer.`)) return;
+      await api('POST', `/api/admin/competitions/${t.dataset.closecup}/close`, { champion }); toast('Campeonato cerrado y premios repartidos'); return render();
     }
     if (t.dataset.act === 'saveComp') {
       const row = t.closest('.comprow'), v = (n) => row.querySelector(`[name=${n}]`).value;
-      await api('PATCH', `/api/admin/competitions/${row.dataset.cid}`, { kind: v('kind'), entry_fee: Number(v('entry_fee')), champ_fee: Number(v('champ_fee')), champ_open: v('champ_open') === '1' });
+      await api('PATCH', `/api/admin/competitions/${row.dataset.cid}`, { entry_fee: Number(v('entry_fee')), red_fee: Number(v('red_fee')), champ_fee: Number(v('champ_fee')), champ_open: v('champ_open') === '1' });
       toast('Premios guardados'); return render();
     }
     if (t.dataset.act === 'reqOk' || t.dataset.act === 'reqNo') {
@@ -554,7 +590,7 @@ document.addEventListener('click', async (e) => {
     if (t.dataset.act === 'grant') {
       const amount = parseInt(document.getElementById('grAmt').value, 10);
       if (!Number.isInteger(amount) || !amount) throw new Error('Poné cuántas fichas');
-      await api('POST', '/api/admin/grant', { group_id: Number(document.getElementById('grGroup').value), user_id: Number(document.getElementById('grUser').value), amount, reason: document.getElementById('grWhy').value });
+      await api('POST', '/api/admin/grant', { group_id: Number(document.getElementById('grGroup').value), user_id: Number(document.getElementById('grUser').value), amount, color: document.getElementById('grColor').value, reason: document.getElementById('grWhy').value });
       toast('Listo'); return render();
     }
     if (t.dataset.act === 'saveKey' || t.dataset.act === 'rmKey') {
@@ -587,7 +623,7 @@ document.addEventListener('click', async (e) => {
       toast(`${r.report.reduce((s, x) => s + (x.matches || 0), 0)} partidos en ${r.report.length} torneos` + (errs.length ? ` (${errs.length} con error)` : ''), !!errs.length);
       return render();
     }
-    if (t.dataset.act === 'addComp') { const name = document.getElementById('newComp').value.trim(); if (!name) return; await api('POST', '/api/admin/competitions', { name, kind: document.getElementById('newKind').value }); toast('Torneo creado'); return render(); }
+    if (t.dataset.act === 'addComp') { const name = document.getElementById('newComp').value.trim(); if (!name) return; await api('POST', '/api/admin/competitions', { name }); toast('Torneo creado'); return render(); }
     if (t.dataset.act === 'addMatch') {
       const v = (id) => document.getElementById(id).value;
       await api('POST', '/api/admin/matches', { comp_id: v('mComp'), home: v('mHome'), away: v('mAway'), round: v('mRound'), kickoff: new Date(v('mWhen')).toISOString() });

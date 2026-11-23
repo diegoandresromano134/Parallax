@@ -121,3 +121,16 @@ details.box[open] summary::after { content: '▴'; }
 details.mini { margin: 4px 0 10px; } details.mini summary { cursor: pointer; font-size: .8rem; color: var(--mute); }
 details.mini summary::after { content: ''; }
 .comprow { border-bottom: 1px solid #ffffff12; }
+
+/* ---- fichas de colores ---- */
+.wallets { display: flex; gap: 6px; background: none; flex: none; }
+.w { font-weight: 700; font-variant-numeric: tabular-nums; border-radius: 99px; padding: 3px 9px; font-size: .78rem; background: #000a; border: 1px solid var(--line); white-space: nowrap; }
+.w.g { border-color: #3ddc84; color: #3ddc84; } .w.r { border-color: #ff6b6b; color: #ff6b6b; } .w.y { border-color: #f5c542; color: #f5c542; }
+.walletbox { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.walletbox .w { border-radius: 12px; padding: 10px 6px; text-align: center; font-size: .78rem; white-space: normal; }
+.walletbox b { display: block; font-size: 1.05rem; } .walletbox small { display: block; font-weight: 400; color: var(--mute); font-size: .64rem; line-height: 1.2; margin-top: 2px; }
+.strip.red { background: #ff6b6b14; border-color: #ff6b6b; } .strip.gold { background: #f5c54214; border-color: #f5c542; }
+.mini-btn.red { background: #ff6b6b; color: #1a0000; } .mini-btn.gold { background: #f5c542; color: #1a1500; }
+.team-sel { width: auto; padding: 6px 8px; font-size: .8rem; max-width: 100%; }
+@media (max-width: 380px) { .w { padding: 2px 6px; font-size: .7rem; } }
+.strip.green { background: #3ddc8414; border-color: #3ddc84; }

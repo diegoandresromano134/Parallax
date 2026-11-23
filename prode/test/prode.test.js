@@ -12,7 +12,7 @@ const { mapEvent, mapStatus } = await import('../server/providers/thesportsdb.js
 const { ageOn, validateAccount, validPassword } = await import('../server/validate.js');
 const { computeTable } = await import('../server/standings.js');
 const { vapidAuth, queueReminders, pull } = await import('../server/push.js');
-const { rankEntrants, splitPot, kindFor } = await import('../server/prizes.js');
+const { rankEntrants, rankRed, splitPot, kindFor } = await import('../server/prizes.js');
 const { server } = await import('../server/server.js');
 
 // ---------- reglas puras ----------
@@ -54,6 +54,9 @@ test('premios: desempate y reparto del pozo', () => {
   const tie = rankEntrants([e(1, 4, 1, 3), e(2, 4, 1, 3), e(3, 2, 0, 1)]);
   assert.deepEqual([...splitPot(301, tie)], [[1, 151], [2, 150]]);
   assert.equal(kindFor('Copa Libertadores'), 'cup'); assert.equal(kindFor('Argentine Primera Division'), 'league');
+  // roja: manda la cantidad de marcadores exactos, no los puntos
+  const rr = rankRed([e(1, 9, 1, 5), e(2, 3, 2, 8), e(3, 3, 2, 4)]);
+  assert.deepEqual(rr.map((x) => x.user_id), [3, 2, 1]);
 });
 
 // ---------- servidor ----------
@@ -66,9 +69,19 @@ const call = async (method, path, body, token) => {
 const acct = (n, extra = {}) => ({ email: `${n}@mail.com`, password: 'clave1234', first_name: n, last_name: 'Prueba', nick: n, birth_date: '1990-05-10', accept: true, ...extra });
 const hrs = (h) => new Date(Date.now() + h * 3600e3).toISOString();
 let ADM, A, B, gid, CODE;
-const coins = async (u, g = gid) => (await call('GET', '/api/me', null, u.token)).data.groups.find((x) => x.id === g).coins;
-const grant = (u, amount, g = gid) => call('POST', '/api/admin/grant', { user_id: u.user.id, group_id: g, amount }, ADM.token);
-const newComp = async (name, kind) => (await call('POST', '/api/admin/competitions', { name, kind }, ADM.token)).data.id;
+const wallet = async (u, g = gid) => (await call('GET', '/api/me', null, u.token)).data.groups.find((x) => x.id === g);
+const coins = async (u, g = gid) => (await wallet(u, g)).coins; // 🟢 verdes
+const reds = async (u, g = gid) => (await wallet(u, g)).red_coins; // 🔴
+const golds = async (u, g = gid) => (await wallet(u, g)).gold_coins; // 🟡
+const grant = (u, amount, g = gid, color = 'green') => call('POST', '/api/admin/grant', { user_id: u.user.id, group_id: g, amount, color }, ADM.token);
+// torneos de prueba con inscripciones chicas: 🟢 100, 🔴 50, 🟡 200
+const newComp = async (name, kind) => {
+  const id = (await call('POST', '/api/admin/competitions', { name, kind }, ADM.token)).data.id;
+  await call('PATCH', `/api/admin/competitions/${id}`, { entry_fee: 100, red_fee: 50, champ_fee: 200 }, ADM.token);
+  return id;
+};
+const joinRed = (u, comp, round, g = gid) => call('POST', `/api/groups/${g}/rounds/join-red`, { comp_id: comp, round }, u.token);
+const pick = (u, comp, team, g = gid) => call('POST', `/api/groups/${g}/champs/${comp}/join`, { pick: team }, u.token);
 const newMatch = async (comp, home, away, kickoff, round) => (await call('POST', '/api/admin/matches', { comp_id: comp, home, away, kickoff, round }, ADM.token)).data.id;
 const result = (id, home, away) => call('POST', `/api/admin/matches/${id}/result`, { home, away }, ADM.token);
 const join = (u, comp, round, g = gid) => call('POST', `/api/groups/${g}/rounds/join`, { comp_id: comp, round }, u.token);
@@ -132,6 +145,14 @@ test('fichas: solo las carga el admin, a pedido', async () => {
   await call('POST', `/api/admin/coin-requests/${pend[1].id}`, { action: 'approve', amount: 1000 }, ADM.token); // ajusta el monto
   assert.equal((await call('POST', `/api/admin/coin-requests/${pend[1].id}`, { action: 'approve' }, ADM.token)).status, 404);
   assert.equal(await coins(A), 1000); assert.equal(await coins(B), 1000);
+  // billeteras separadas: un pedido de fichas rojas carga solo rojas
+  assert.equal((await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 500, color: 'azul' }, B.token)).status, 400);
+  await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 500, color: 'red' }, B.token);
+  const rq = (await call('GET', '/api/admin/coin-requests', null, ADM.token)).data;
+  assert.equal(rq[0].color, 'red');
+  await call('POST', `/api/admin/coin-requests/${rq[0].id}`, { action: 'approve' }, ADM.token);
+  assert.equal(await reds(B), 500); assert.equal(await coins(B), 1000); assert.equal(await golds(B), 0);
+  await grant(B, -500, gid, 'red'); // vuelve a cero
   await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 777 }, B.token);
   const r3 = (await call('GET', '/api/admin/coin-requests', null, ADM.token)).data;
   await call('POST', `/api/admin/coin-requests/${r3[0].id}`, { action: 'reject' }, ADM.token);
@@ -179,41 +200,105 @@ test('partido sin nombre de fecha: es su propia fecha', async () => {
   assert.equal((await pred(A, m, 1, 0)).status, 200);
 });
 
-test('campeonato de copas: pozo por puntos acumulados, lo cierra el admin', async () => {
-  const cup = await newComp('Copa Argentina Test'); // se detecta como copa
-  await grant(A, 1000); await grant(B, 1000);
-  const m1 = await newMatch(cup, 'X', 'Y', hrs(24), 'Ronda 1'), m2 = await newMatch(cup, 'Z', 'W', hrs(48), 'Ronda 2');
-  const [a0, b0] = [await coins(A), await coins(B)];
-  assert.equal((await call('POST', `/api/groups/${gid}/champs/${cup}/join`, null, A.token)).status, 200);
-  assert.equal((await call('POST', `/api/groups/${gid}/champs/${cup}/join`, null, A.token)).status, 400);
-  await call('POST', `/api/groups/${gid}/champs/${cup}/join`, null, B.token);
-  await join(A, cup, 'Ronda 1'); await join(B, cup, 'Ronda 1'); await join(A, cup, 'Ronda 2'); await join(B, cup, 'Ronda 2');
-  await pred(A, m1, 1, 0); await pred(B, m1, 0, 1); await pred(A, m2, 2, 2); await pred(B, m2, 1, 0);
-  await result(m1, 1, 0); await result(m2, 2, 2);
-  const pot = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
-  assert.equal(pot.pot, 600); assert.equal(pot.board[0].nick, 'Diego'); assert.equal(pot.board[0].pts, 6);
-  assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, null, A.token)).status, 403);
-  const antes = await coins(A);
-  await call('POST', `/api/admin/competitions/${cup}/close`, null, ADM.token);
-  assert.equal(await coins(A), antes + 600);
-  await call('POST', `/api/admin/competitions/${cup}/close`, null, ADM.token); // no paga dos veces
-  assert.equal(await coins(A), antes + 600);
-  assert.equal((await call('POST', `/api/groups/${gid}/champs/${cup}/join`, null, B.token)).status, 400);
-  assert.ok(a0 >= 0 && b0 >= 0);
+test('🔴 pozo de goles: hay que estar en verde, gana quien más marcadores exactos acierta, y se acumula si nadie acierta', async () => {
+  const comp = await newComp('Liga Roja', 'league');
+  await grant(A, 1000); await grant(B, 1000); await grant(A, 1000, gid, 'red'); await grant(B, 1000, gid, 'red');
+  const [a0, b0] = [await reds(A), await reds(B)];
+  const m1 = await newMatch(comp, 'A', 'B', hrs(24), 'Fecha 1'), m2 = await newMatch(comp, 'C', 'D', hrs(48), 'Fecha 1');
+  // sin estar anotado en verde no se puede ir a la roja; y no se paga con fichas verdes
+  assert.match((await joinRed(A, comp, 'Fecha 1')).data.error, /verdes/);
+  await join(A, comp, 'Fecha 1'); await join(B, comp, 'Fecha 1');
+  assert.equal((await joinRed(A, comp, 'Fecha 1')).status, 200); assert.equal((await joinRed(A, comp, 'Fecha 1')).status, 400);
+  assert.equal(await reds(A), a0 - 50);
+  assert.equal(await coins(A) >= 0, true);
+  // solo A va a la roja: B apuesta solo en verde
+  await pred(A, m1, 1, 0); await pred(A, m2, 2, 2); await pred(B, m1, 1, 0); await pred(B, m2, 2, 2);
+  const pots = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp);
+  assert.equal(pots.red.pot, 50); assert.equal(pots.red.players, 1); assert.equal(pots.red.joined, true);
+  // A salió "en cero": nadie acertó marcador exacto -> el pozo rojo pasa acumulado a la fecha siguiente
+  await result(m1, 3, 1); await result(m2, 0, 1);
+  assert.equal(await reds(A), a0 - 50);
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp).red.carry, 50);
+  // fecha 2: A y B se anotan en verde; B también en roja. Acierta un marcador exacto B -> se lleva su inscripción + el acumulado
+  const m3 = await newMatch(comp, 'E', 'F', hrs(30), 'Fecha 2');
+  await join(A, comp, 'Fecha 2'); await join(B, comp, 'Fecha 2');
+  await joinRed(A, comp, 'Fecha 2'); await joinRed(B, comp, 'Fecha 2');
+  await pred(A, m3, 1, 0); await pred(B, m3, 2, 1);
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 2').red.pot, 150); // 50 + 50 + 50 acumulados
+  await result(m3, 2, 1);
+  assert.equal(await reds(B), b0 - 50 + 150); assert.equal(await reds(A), a0 - 50 - 50); // B ganó el pozo rojo; A perdió dos inscripciones
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 2').red.carry, 0);
+  // salir de verde saca también de roja y devuelve todo
+  const m4 = await newMatch(comp, 'G', 'H', hrs(60), 'Fecha 3');
+  await join(A, comp, 'Fecha 3'); await joinRed(A, comp, 'Fecha 3');
+  const [rr, vv] = [await reds(A), await coins(A)];
+  await call('POST', `/api/groups/${gid}/rounds/leave`, { comp_id: comp, round: 'Fecha 3' }, A.token);
+  assert.equal(await reds(A), rr + 50); assert.equal(await coins(A), vv + 100); assert.ok(m4);
+  // sin fichas rojas no hay inscripción roja
+  const C = (await call('POST', '/api/register', acct('Sinrojas', { code: CODE }))).data;
+  await grant(C, 1000); await join(C, comp, 'Fecha 3');
+  assert.match((await joinRed(C, comp, 'Fecha 3')).data.error, /rojas/);
+});
+
+test('🟡 campeón: se elige antes del cierre, se reparte entre los que aciertan y si nadie acierta gana la casa', async () => {
+  const cup = await newComp('Copa Argentina Test');
+  await newMatch(cup, 'Boca', 'River', hrs(24), 'Ronda 1'); await newMatch(cup, 'Racing', 'Estudiantes', hrs(48), 'Ronda 1');
+  await grant(A, 1000, gid, 'gold'); await grant(B, 1000, gid, 'gold');
+  const [ga, gb] = [await golds(A), await golds(B)];
+  const info = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
+  assert.deepEqual(info.teams, ['Boca', 'Estudiantes', 'Racing', 'River']); assert.equal(info.fee, 200);
+  assert.equal((await pick(A, cup, 'Inventado')).status, 400);
+  assert.equal((await pick(A, cup, 'Boca')).status, 200); assert.equal(await golds(A), ga - 200);
+  assert.equal((await pick(A, cup, 'River')).data.changed, true); assert.equal(await golds(A), ga - 200); // cambiar la elección no cobra otra vez
+  await pick(B, cup, 'Racing');
+  const mid = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
+  assert.equal(mid.pot, 400); assert.equal(mid.my_pick, 'River'); assert.deepEqual(mid.picks, []); // las elecciones ajenas no se ven hasta el cierre
+  assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, A.token)).status, 403);
+  assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'Nadie' }, ADM.token)).status, 400);
+  await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, ADM.token);
+  assert.equal(await golds(A), ga - 200 + 400); assert.equal(await golds(B), gb - 200);
+  await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, ADM.token); // no paga dos veces
+  assert.equal(await golds(A), ga - 200 + 400);
+  const done = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
+  assert.equal(done.closed, true); assert.equal(done.champion, 'River'); assert.equal(done.picks.length, 2);
+  assert.equal((await pick(B, cup, 'Boca')).status, 400); // cerrado
+  // si nadie acierta, el pozo se lo queda la casa
+  const cup2 = await newComp('Copa Libertadores Test');
+  await newMatch(cup2, 'Palmeiras', 'Flamengo', hrs(24), 'Octavos');
+  await pick(A, cup2, 'Palmeiras'); await pick(B, cup2, 'Flamengo');
+  const [g2a, g2b] = [await golds(A), await golds(B)];
+  await newMatch(cup2, 'Nacional', 'Peñarol', hrs(30), 'Octavos');
+  await call('POST', `/api/admin/competitions/${cup2}/close`, { champion: 'Nacional' }, ADM.token);
+  assert.equal(await golds(A), g2a); assert.equal(await golds(B), g2b);
+  const house = (await call('GET', '/api/admin/pots', null, ADM.token)).data.house;
+  assert.equal(house[0].amount, 400); assert.match(house[0].reason, /Nadie acertó/);
+  // sin fichas doradas no hay inscripción dorada
+  const cup3 = await newComp('Recopa Test'); await newMatch(cup3, 'X', 'Y', hrs(24), 'Final');
+  const C = (await call('POST', '/api/login', { email: 'sinrojas@mail.com', password: 'clave1234' })).data;
+  assert.match((await pick(C, cup3, 'X')).data.error, /doradas/);
 });
 
 test('canje: el admin define los premios, el jugador canjea con fichas', async () => {
   assert.equal((await call('POST', '/api/admin/rewards', { title: 'Asado', cost: 500 }, A.token)).status, 403);
   assert.equal((await call('POST', '/api/admin/rewards', { title: 'x', cost: 500 }, ADM.token)).status, 400);
   const asado = (await call('POST', '/api/admin/rewards', { title: 'Asado para dos', description: 'En lo de Diego', cost: 500 }, ADM.token)).data.id;
+  const dorado = (await call('POST', '/api/admin/rewards', { title: 'Camiseta firmada', cost: 100, color: 'gold' }, ADM.token)).data.id;
+  assert.equal((await call('POST', '/api/admin/rewards', { title: 'Mala', cost: 5, color: 'azul' }, ADM.token)).status, 400);
   const camiseta = (await call('POST', '/api/admin/rewards', { title: 'Camiseta', cost: 100000 }, ADM.token)).data.id;
   const list = (await call('GET', '/api/rewards', null, B.token)).data;
-  assert.deepEqual(list.map((r) => r.title), ['Asado para dos', 'Camiseta']);
+  assert.deepEqual(list.map((r) => r.title), ['Camiseta firmada', 'Asado para dos', 'Camiseta']); assert.equal(list[0].color, 'gold');
   assert.match((await call('POST', `/api/groups/${gid}/redeem`, { reward_id: camiseta }, B.token)).data.error, /Te faltan/);
+  // un premio en fichas doradas se paga con la billetera dorada, no con las verdes
+  const [vb, gb2] = [await coins(B), await golds(B)];
+  assert.equal((await call('POST', `/api/groups/${gid}/redeem`, { reward_id: dorado }, B.token)).status, 200);
+  assert.equal(await coins(B), vb); assert.equal(await golds(B), gb2 - 100);
+  const d = (await call('GET', '/api/admin/redemptions', null, ADM.token)).data.find((r) => r.title === 'Camiseta firmada');
+  await call('POST', `/api/admin/redemptions/${d.id}`, { action: 'reject' }, ADM.token);
+  assert.equal(await golds(B), gb2); // devolvió fichas doradas
   const antes = await coins(B);
   assert.equal((await call('POST', `/api/groups/${gid}/redeem`, { reward_id: asado }, B.token)).status, 200);
   assert.equal(await coins(B), antes - 500);
-  const pend = (await call('GET', '/api/admin/redemptions', null, ADM.token)).data;
+  const pend = (await call('GET', '/api/admin/redemptions', null, ADM.token)).data.filter((r) => r.title === 'Asado para dos');
   assert.equal(pend.length, 1); assert.equal(pend[0].nick, 'Marcos');
   assert.equal((await call('GET', '/api/admin/redemptions', null, B.token)).status, 403);
   assert.ok((await call('GET', '/api/me', null, ADM.token)).data.admin_pending >= 1);
@@ -223,10 +308,10 @@ test('canje: el admin define los premios, el jugador canjea con fichas', async (
   assert.equal((await call('POST', `/api/admin/redemptions/${pend[0].id}`, { action: 'deliver' }, ADM.token)).status, 404);
   // entregar
   await call('POST', `/api/groups/${gid}/redeem`, { reward_id: asado }, B.token);
-  const p2 = (await call('GET', '/api/admin/redemptions', null, ADM.token)).data[0];
+  const p2 = (await call('GET', '/api/admin/redemptions', null, ADM.token)).data.find((r) => r.title === 'Asado para dos');
   await call('POST', `/api/admin/redemptions/${p2.id}`, { action: 'deliver' }, ADM.token);
   assert.equal(await coins(B), antes - 500);
-  assert.deepEqual((await call('GET', `/api/groups/${gid}/redemptions`, null, B.token)).data.map((r) => r.status), ['delivered', 'rejected']);
+  assert.deepEqual((await call('GET', `/api/groups/${gid}/redemptions`, null, B.token)).data.map((r) => r.status), ['delivered', 'rejected', 'rejected']);
   // un premio desactivado ya no se puede canjear
   await call('PATCH', `/api/admin/rewards/${asado}`, { active: false }, ADM.token);
   assert.match((await call('POST', `/api/groups/${gid}/redeem`, { reward_id: asado }, B.token)).data.error, /no está disponible/);
