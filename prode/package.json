@@ -1,0 +1,13 @@
+{
+  "name": "prode-amigos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PRODE entre amigos: app web instalable (Android/iPhone) sin publicar en tiendas",
+  "scripts": {
+    "start": "node server/server.js",
+    "demo": "PRODE_DEMO=1 node server/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=22.13" }
+}
