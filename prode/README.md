@@ -7,10 +7,10 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 ## Administrador y fichas
 - **Hay un solo admin:** la cuenta de `PRODE_ADMIN_EMAIL`, creada por el servidor con `PRODE_ADMIN_PASSWORD`.
   Nadie puede registrarse con ese mail ni con un apodo que empiece con "admin". Es el único que ve la pestaña **Admin**:
-  pedidos de fichas, carga directa, clave de la suscripción de datos, torneos, partidos y resultados a mano, usuarios y movimientos.
+  pedidos de fichas, canjes, premios canjeables, carga directa, clave de la suscripción de datos, torneos y sus precios, partidos y resultados a mano, usuarios y movimientos.
   Sin esas variables (solo para probar en tu compu) el primer usuario registrado queda como admin: **no publiques la app sin configurarlas**.
 - **Fichas:** nadie arranca con fichas. Cada jugador pide fichas desde la pestaña Grupo (cantidad y mensaje) y el admin las carga o rechaza;
-  el jugador recibe un aviso. Sin fichas se puede pronosticar y sumar puntos, pero no apostar. Todos los movimientos quedan registrados.
+  el jugador recibe un aviso. Sin fichas no se puede jugar ningún torneo. Todos los movimientos quedan registrados.
 - **Suscripción de datos:** pegá la clave en Admin → Fuente de datos y tocá *Probar conexión*. No hace falta tocar el servidor.
 
 ## Cuentas y grupos
@@ -37,27 +37,6 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
   las fichas se descuentan, y el admin marca la entrega o rechaza (y se devuelven). Los canjes pendientes suman al globito rojo del panel.
 - ⚠️ **Importante:** mientras las fichas solo las carga el admin gratis (a pedido), esto es un juego entre amigos. Si alguna vez se **cobran** fichas con dinero real
   y se entregan premios de valor, pasa a ser un juego de azar/apuestas, que en Argentina está regulado. No lo hagas sin asesoramiento.
-- Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
-
-## Cuentas y grupos
-- **Ingreso obligatorio:** sin cuenta no se puede ver ni jugar nada.
-- **Registro:** nombre, apellido, apodo, mail, fecha de nacimiento, contraseña (8+ con letras y números) y aceptar las reglas. **Solo mayores de 16**: se calcula con la fecha de nacimiento y se valida en el servidor.
-  La edad es declarada, la app no puede verificarla. El mail no se verifica por correo (no hay servicio de mail configurado).
-- **Olvidé mi contraseña:** quien creó el grupo (o el admin) le pone una clave temporal (pestaña Grupo → Clave). El creador del grupo solo maneja nombre, color, código y claves de su grupo, no las fichas.
-- **Varios grupos:** cada grupo tiene su código/link, sus fichas, su pozo, su ranking y sus comentarios. Se puede estar en varios.
-- **Perfil:** foto, color, equipo favorito, cambio de contraseña y avisos en el celular.
-- Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
-- **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
-
-## Premios: ligas por fecha, copas por partido y campeonato
-- **Ligas** (Liga Profesional, Primera Nacional…): se juega por **fecha**. Los jugadores se anotan al pozo de la fecha pagando una inscripción en fichas
-  (100 por defecto) **antes de que empiece la fecha**. Cuando terminan todos sus partidos gana quien suma más puntos; desempata quien tuvo más resultados
-  exactos y luego quien erró menos goles (un partido sin pronóstico cuenta como error grande). Si siguen empatados, se reparte. En ligas no hay apuesta por partido.
-- **Copas** (Libertadores, Sudamericana, Copa Argentina, Recopa, Supercopa): premio **por partido** con el pozo de apuestas (Local/Empate/Visitante), y además un
-  **pozo del campeonato** (300 por defecto) que se reparte al final entre quienes acumularon más puntos. Solo cuentan los partidos que empiezan después de anotarse.
-  **Lo cierra el admin** (Admin → Premios en juego → Cerrar y repartir) cuando termina el torneo; no se cierra solo porque las copas cargan sus fases de a poco.
-- El tipo de torneo se detecta por el nombre y se cambia en Admin → Torneos → Premios de este torneo, donde también se editan las inscripciones (0 = sin pozo).
-- Una fecha trabada (por ejemplo, un partido postergado) se cierra a mano desde el panel. Una fecha suspendida entera devuelve las inscripciones.
 - Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
 
 ## Torneos y fixture automático
