@@ -8,8 +8,7 @@ export function outcome(h, a) {
   return h > a ? 'L' : h < a ? 'V' : 'E';
 }
 
-/** PRODE clásico: resultado exacto = 3 pts, acertar ganador/empate = 1 pt. */
-export function predictionPoints(pred, real) {
-  if (pred.home === real.home && pred.away === real.away) return 3;
-  return outcome(pred.home, pred.away) === outcome(real.home, real.away) ? 1 : 0;
-}
+/** 🟢 1 punto si acertó quién gana (o el empate). */
+export const pickPoints = (pick, real) => (pick && pick === outcome(real.home, real.away) ? 1 : 0);
+/** 🔴 1 si acertó el marcador exacto. */
+export const isExact = (pred, real) => pred.home === real.home && pred.away === real.away;

@@ -1,8 +1,10 @@
 // Premios en fichas de colores (billeteras separadas por jugador y grupo):
-//  🟢 VERDE: inscripción por fecha/ronda de cualquier torneo. Permite pronosticar todos los partidos de la fecha
-//     (ganador y resultado exacto). Gana el pozo verde quien suma más puntos.
-//  🔴 ROJA: inscripción por fecha para el pozo de GOLES (hay que estar anotado en verde). Gana quien acierta más
-//     marcadores exactos. Si nadie acierta ninguno, el pozo pasa acumulado a la fecha siguiente del torneo.
+//  🟢 VERDE: inscripción por fecha/ronda de cualquier torneo. Se pronostica QUIÉN GANA cada partido (Local, Empate
+//     o Visitante). Gana el pozo verde quien acierta más ganadores en la fecha; si hay empate, se reparte.
+//  🔴 ROJA: inscripción por fecha para el pozo de GOLES (hay que estar anotado en verde). Se pronostica el MARCADOR
+//     EXACTO. Para llevarse el pozo hay que haber acertado también la mayoría de los ganadores de la fecha y tener
+//     marcadores exactos; gana quien más exactos tiene. Si nadie lo logra, la mitad del pozo queda acumulada para la
+//     fecha siguiente y la otra mitad se la queda la casa.
 //  🟡 DORADA: inscripción por torneo para elegir al CAMPEÓN. Se reparte entre quienes acertaron; si nadie acierta
 //     se queda la casa.
 import { db } from './db.js';
@@ -22,20 +24,17 @@ export function credit(uid, gid, color, amount) {
   db.prepare(`UPDATE memberships SET ${WALLET[color]}=${WALLET[color]}+? WHERE user_id=? AND group_id=?`).run(amount, uid, gid);
 }
 
-/** Verde: puntos, luego exactos, luego menor error de goles. */
+/** Verde: más ganadores acertados. Los empatados se reparten el pozo. */
 export function rankEntrants(list) {
-  const key = (e) => [e.pts, e.exact, -e.err];
-  return [...list].sort((a, b) => {
-    const [x, y] = [key(a), key(b)];
-    for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return y[i] - x[i];
-    return a.user_id - b.user_id;
-  });
+  return [...list].sort((a, b) => b.pts - a.pts || a.user_id - b.user_id);
 }
-/** Roja: más marcadores exactos, luego menor error de goles. */
+/** Roja: más marcadores exactos y, a igual cantidad, menos goles errados. Califican solo quienes acertaron la mayoría de los ganadores. */
 export function rankRed(list) {
-  return [...list].sort((a, b) => b.exact - a.exact || a.err - b.err || a.user_id - b.user_id);
+  return [...list].sort((a, b) => (b.eligible - a.eligible) || b.exact - a.exact || a.err - b.err || a.user_id - b.user_id);
 }
-const sameGreen = (a, b) => a.pts === b.pts && a.exact === b.exact && a.err === b.err;
+/** Acertar "la mayoría" = más de la mitad de los partidos jugados de la fecha. */
+export const hasMajority = (hits, total) => total > 0 && hits * 2 > total;
+const sameGreen = (a, b) => a.pts === b.pts;
 const sameRed = (a, b) => a.exact === b.exact && a.err === b.err;
 
 /** Reparte el pozo entre los empatados en primer lugar. El resto de la división va al primero. */
@@ -47,17 +46,18 @@ export function splitPot(pot, board, same = sameGreen) {
   return out;
 }
 
-// Desempate por goles errados: un partido sin pronóstico cuenta como un error grande, así saltearse partidos no ayuda.
+// Desempate por goles errados (roja): un partido sin marcador pronosticado cuenta como un error grande.
 const MISSING_ERR = 10;
 function scoreboard(entrants, rows, total, rank) {
   const by = new Map(rows.map((r) => [r.user_id, r]));
   return rank(entrants.map((e) => {
-    const r = by.get(e.user_id), n = r?.n || 0;
-    return { user_id: e.user_id, pts: r?.pts || 0, exact: r?.exact || 0, played: n, err: (r?.err || 0) + Math.max(0, total - n) * MISSING_ERR };
+    const r = by.get(e.user_id), pts = r?.pts || 0;
+    return { user_id: e.user_id, pts, exact: r?.exact || 0, err: (r?.err || 0) + Math.max(0, total - (r?.n || 0)) * MISSING_ERR, eligible: hasMajority(pts, total) ? 1 : 0, total };
   }));
 }
-const AGG = `SUM(COALESCE(p.points,0)) AS pts, SUM(p.points=3) AS exact,
-  SUM(ABS(p.home-m.home_goals)+ABS(p.away-m.away_goals)) AS err, COUNT(*) AS n`;
+const AGG = `SUM(COALESCE(p.points,0)) AS pts, SUM(COALESCE(p.exact,0)) AS exact,
+  SUM(CASE WHEN p.home IS NOT NULL THEN ABS(p.home-m.home_goals)+ABS(p.away-m.away_goals) ELSE 0 END) AS err,
+  SUM(CASE WHEN p.home IS NOT NULL THEN 1 ELSE 0 END) AS n`;
 const finishedIn = (compId, round) => db.prepare("SELECT COUNT(*) AS n FROM matches WHERE comp_id=? AND round=? AND status='finished'").get(compId, round).n;
 
 function board(table, rank, gid, compId, round) {
@@ -84,21 +84,25 @@ function settleRed(gid, compId, round, compName, played) {
     for (const e of entries) { credit(e.user_id, gid, 'red', e.fee); setPay.run(e.fee, gid, compId, round, e.user_id); enqueueForUser(e.user_id, 'Fecha suspendida', `${compName} · ${round} se suspendió. Te devolvimos ${fmt(e.fee)} fichas rojas.`); }
     return;
   }
-  const carry = carryOf(gid, compId), pot = entries.reduce((s, e) => s + e.fee, 0) + carry, b = redBoard(gid, compId, round);
-  if (!b.length || b[0].exact === 0) { // nadie acertó ningún marcador: el pozo pasa a la fecha siguiente
+  const carry = carryOf(gid, compId), pot = entries.reduce((s, e) => s + e.fee, 0) + carry;
+  const qualified = redBoard(gid, compId, round).filter((b) => b.eligible && b.exact > 0);
+  if (!qualified.length) {
+    // nadie acertó goles exactos (con la mayoría de los ganadores): la mitad queda acumulada y la otra mitad se la queda la casa
+    const kept = Math.floor(pot / 2), house = pot - kept;
     for (const e of entries) setPay.run(0, gid, compId, round, e.user_id);
-    db.prepare('INSERT INTO red_carry(group_id, comp_id, amount) VALUES (?,?,?) ON CONFLICT(group_id, comp_id) DO UPDATE SET amount=excluded.amount').run(gid, compId, pot);
-    for (const e of entries) enqueueForUser(e.user_id, `${compName} · ${round}`, `Nadie acertó ningún marcador. El pozo de goles (${fmt(pot)} 🔴) pasa acumulado a la próxima fecha.`);
+    db.prepare('INSERT INTO red_carry(group_id, comp_id, amount) VALUES (?,?,?) ON CONFLICT(group_id, comp_id) DO UPDATE SET amount=excluded.amount').run(gid, compId, kept);
+    db.prepare('INSERT INTO house_take(group_id, comp_id, color, amount, reason) VALUES (?,?,?,?,?)').run(gid, compId, 'red', house, `Nadie acertó goles exactos en ${compName} · ${round}`);
+    for (const e of entries) enqueueForUser(e.user_id, `${compName} · ${round}`, `Nadie acertó los goles exactos. De ${fmt(pot)} 🔴, ${fmt(kept)} pasan acumulados a la próxima fecha y ${fmt(house)} se queda la casa.`);
     return;
   }
-  const prizes = splitPot(pot, b, sameRed);
+  const prizes = splitPot(pot, qualified, sameRed);
   for (const e of entries) setPay.run(prizes.get(e.user_id) || 0, gid, compId, round, e.user_id);
   for (const [uid, amount] of prizes) credit(uid, gid, 'red', amount);
   db.prepare('DELETE FROM red_carry WHERE group_id=? AND comp_id=?').run(gid, compId);
   const names = [...prizes.keys()].map(nick).join(' y ');
   for (const e of entries) {
     const won = prizes.get(e.user_id);
-    enqueueForUser(e.user_id, `${compName} · ${round}`, won ? `¡Ganaste el pozo de goles! +${fmt(won)} fichas rojas.` : `Pozo de goles: ganó ${names} (${b[0].exact} marcadores exactos).`);
+    enqueueForUser(e.user_id, `${compName} · ${round}`, won ? `¡Ganaste el pozo de goles! +${fmt(won)} fichas rojas.` : `Pozo de goles: ganó ${names} (${qualified[0].exact} marcadores exactos).`);
   }
 }
 
@@ -120,7 +124,7 @@ export function settleRound(gid, compId, round, force = false) {
     const names = [...prizes.keys()].map(nick).join(' y ');
     for (const e of entries) {
       const won = prizes.get(e.user_id);
-      enqueueForUser(e.user_id, `${comp} · ${round}`, won ? `¡Ganaste el pozo de la fecha! +${fmt(won)} fichas verdes.` : `Terminó la fecha. Ganó ${names} (${b[0].pts} pts).`);
+      enqueueForUser(e.user_id, `${comp} · ${round}`, won ? `¡Ganaste el pozo de la fecha! +${fmt(won)} fichas verdes.` : `Terminó la fecha. Ganó ${names} (${b[0].pts} ganadores acertados).`);
     }
   }
   settleRed(gid, compId, round, comp, played);

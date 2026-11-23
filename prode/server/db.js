@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS predictions (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-  home INTEGER NOT NULL, away INTEGER NOT NULL, points INTEGER,
+  pick TEXT CHECK (pick IN ('L','E','V')),      -- 🟢 quién gana: Local, Empate o Visitante
+  home INTEGER, away INTEGER,                    -- 🔴 marcador exacto (solo con inscripción roja)
+  points INTEGER,                                -- 1 si acertó el ganador
+  exact INTEGER,                                 -- 1 si acertó el marcador exacto
   PRIMARY KEY (user_id, group_id, match_id));
 CREATE TABLE IF NOT EXISTS comments (
   id INTEGER PRIMARY KEY,
@@ -115,6 +118,17 @@ CREATE TABLE IF NOT EXISTS notified (
   PRIMARY KEY (user_id, match_id, kind));
 `);
 
+// Migración: pronósticos del formato viejo (solo marcador) -> ganador + marcador opcional.
+if (!db.prepare('PRAGMA table_info(predictions)').all().some((c) => c.name === 'pick')) {
+  db.exec(`ALTER TABLE predictions RENAME TO predictions_old;
+    CREATE TABLE predictions (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE, pick TEXT CHECK (pick IN ('L','E','V')),
+      home INTEGER, away INTEGER, points INTEGER, exact INTEGER, PRIMARY KEY (user_id, group_id, match_id));
+    INSERT INTO predictions(user_id, group_id, match_id, pick, home, away)
+      SELECT user_id, group_id, match_id, CASE WHEN home>away THEN 'L' WHEN home<away THEN 'V' ELSE 'E' END, home, away FROM predictions_old;
+    DROP TABLE predictions_old;`);
+}
 // Migración: columnas nuevas (idempotente). Billeteras por color: coins = VERDES, red_coins = ROJAS, gold_coins = DORADAS.
 const addColumn = (table, col, ddl) => {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl}`);

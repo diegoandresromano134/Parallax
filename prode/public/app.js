@@ -117,22 +117,27 @@ function shell(inner) {
 
 // ---------- partidos ----------
 function matchCard(m) {
-  const p = m.mine.prediction, g = group();
+  const mine = m.mine || {}, g = group();
   const live = m.status === 'live' ? '<span class="live">● EN JUEGO</span>' : m.status === 'postponed' ? '<span class="live">POSTERGADO</span>' : `${fmtTime(m.kickoff)} hs`;
   const header = `<div class="meta"><span>${esc(m.comp)}${m.round ? ' · ' + esc(m.round) : ''}</span><span>${live}</span></div>`;
   const team = (n, b) => `<div class="team">${badge(b, n)}<span>${esc(n)}</span></div>`;
   const footer = `<div class="foot"><button class="ghost" data-act="chat">💬 Comentarios${m.comments ? ` (${m.comments})` : ''}</button>${m.locked || m.status === 'finished' ? '<button class="ghost" data-act="plays">Jugadas del grupo</button>' : ''}</div>
     <div class="plays" data-box="plays" hidden></div><div class="thread" data-box="thread" hidden></div>`;
   const teams = (mid) => `<div class="teams">${team(m.home, m.home_badge)}${mid}${team(m.away, m.away_badge)}</div>`;
+  // resumen de lo que pronosticó el jugador
+  const mineLines = (done) => {
+    const l = [];
+    if (mine.pick) l.push(`🟢 Tu ganador: <b>${esc(pickName(m, mine.pick))}</b>${done ? (mine.points === 1 ? ' → <span class="win">¡acertaste!</span>' : mine.points === 0 ? ' → <span class="lose">no acertaste</span>' : '') : ''}`);
+    if (mine.prediction) l.push(`🔴 Tu marcador: <b>${mine.prediction.home}-${mine.prediction.away}</b>${done ? (mine.exact === 1 ? ' → <span class="win">¡exacto!</span>' : mine.exact === 0 ? ' → <span class="lose">no fue exacto</span>' : '') : ''}`);
+    return l.length ? l : [m.enrolled ? 'No pronosticaste este partido' : 'No participaste en esta fecha'];
+  };
 
   if (m.status === 'finished' || m.status === 'cancelled') {
-    const line = p ? `Tu pronóstico: <b>${p.home}-${p.away}</b> → <span class="pts-${p.points ?? 0}">${p.points == null ? '' : p.points + (p.points === 1 ? ' punto' : ' puntos')}</span>`
-      : m.enrolled ? 'No pronosticaste este partido' : 'No participaste en esta fecha';
-    return `<article class="card" data-id="${m.id}">${header}${teams(`<div class="score final">${m.status === 'cancelled' ? 'Susp.' : `${m.home_goals} - ${m.away_goals}`}</div>`)}<div class="result"><div>${line}</div></div>${footer}</article>`;
+    return `<article class="card" data-id="${m.id}">${header}${teams(`<div class="score final">${m.status === 'cancelled' ? 'Susp.' : `${m.home_goals} - ${m.away_goals}`}</div>`)}<div class="result">${mineLines(true).map((x) => `<div>${x}</div>`).join('')}</div>${footer}</article>`;
   }
   if (m.locked) {
     return `<article class="card" data-id="${m.id}">${header}${teams(`<div class="score final">${m.home_goals ?? '·'} - ${m.away_goals ?? '·'}</div>`)}
-      <div class="result"><div>🔒 Cerrado. ${p ? `Tu pronóstico: <b>${p.home}-${p.away}</b>.` : m.enrolled ? 'No pronosticaste.' : 'No participás en esta fecha.'}</div></div>${footer}</article>`;
+      <div class="result"><div>🔒 Cerrado.</div>${mineLines(false).map((x) => `<div>${x}</div>`).join('')}</div>${footer}</article>`;
   }
   if (!m.enrolled) {
     const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round), fee = m.fee, falta = fee - g.coins;
@@ -141,13 +146,17 @@ function matchCard(m) {
       : falta > 0 ? `<div class="help"><b>Te faltan ${n$(falta)} fichas verdes 🟢</b> para anotarte (${n$(fee)}). Sin fichas no se puede jugar: <button class="link" data-tab="group">pedile fichas al admin</button>.</div>`
       : `<button class="primary" data-join="${m.comp_id}" data-round="${esc(m.round)}">${fee ? `Anotarme a la fecha (${n$(fee)} 🟢)` : 'Anotarme (gratis)'}</button>`;
     return `<article class="card" data-id="${m.id}">${header}${teams('<div class="score final">- : -</div>')}
-      <div class="help" style="text-align:center">🔒 Para pronosticar todos los partidos de esta fecha tenés que anotarte con fichas verdes.</div>${cta}${footer}</article>`;
+      <div class="help" style="text-align:center">🔒 Para pronosticar quién gana en todos los partidos de esta fecha tenés que anotarte con fichas verdes.</div>${cta}${footer}</article>`;
   }
-  return `<article class="card" data-id="${m.id}">${header}
-    ${teams(`<div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
-      <span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div>`)}
+  const sel = mine.pick, p = mine.prediction;
+  const pk = (k) => `<button class="pick ${sel === k ? 'on' : ''}" data-pick="${k}">${esc(pickName(m, k))}</button>`;
+  const goals = m.red_enrolled
+    ? `<div class="redgoals"><span>🔴 Goles exactos</span><div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}"><span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div></div>`
+    : '<div class="help">🔴 Para pronosticar los goles exactos, anotate al pozo de goles de la fecha (arriba).</div>';
+  return `<article class="card" data-id="${m.id}">${header}${teams('<div class="score final">vs</div>')}
+    <div class="help" style="margin:10px 0 4px">🟢 ¿Quién gana?</div><div class="picks">${['L', 'E', 'V'].map(pk).join('')}</div>${goals}
     <button class="primary" data-act="save">Guardar pronóstico</button>
-    <div class="help">${p ? 'Podés cambiarlo hasta que empiece el partido. ' : ''}3 puntos por resultado exacto, 1 por acertar ganador o empate.</div>${footer}</article>`;
+    <div class="help">${mine.pick ? 'Podés cambiarlo hasta que empiece el partido. ' : ''}Gana el pozo verde quien acierta más ganadores de la fecha.</div>${footer}</article>`;
 }
 
 function roundStrip(r) {
@@ -163,7 +172,7 @@ function redStrip(r) {
   const x = r.red; if (!x) return '';
   const win = x.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
   let body;
-  if (r.settled) body = win ? `🔴 Pozo de goles: ganó <b>${win}</b>` : `🔴 Pozo de goles: nadie acertó ningún marcador${x.carry ? ` · <b>${n$(x.carry)}</b> pasan a la próxima fecha` : ''}`;
+  if (r.settled) body = win ? `🔴 Pozo de goles: ganó <b>${win}</b>` : `🔴 Pozo de goles: nadie acertó los goles exactos${x.carry ? ` · <b>${n$(x.carry)}</b> pasan a la próxima fecha, el resto se lo quedó la casa` : ''}`;
   else if (x.joined) body = `🔴 Estás en el pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} ${x.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leavered="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : ''}`;
   else if (x.can_join) body = `🔴 Pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} anotados <button class="mini-btn red" data-joinred="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(x.fee)} 🔴)</button>`;
   else if (!r.joined) return '';
@@ -227,8 +236,9 @@ async function loadMatches() {
 }
 
 function paintPlays(card, id) {
-  const box = card.querySelector('[data-box=plays]'), rows = S.plays[id]; if (!rows) return;
-  box.innerHTML = rows.length ? rows.map((r) => `<div><span class="who">${avatar(r, 20)} ${esc(r.nick)}</span><span>${r.home}-${r.away}${r.points != null ? ` · <span class="pts-${r.points}">${r.points} pt</span>` : ''}</span></div>`).join('') : '<div>Nadie pronosticó este partido</div>';
+  const box = card.querySelector('[data-box=plays]'), rows = S.plays[id], m = S.matches.find((x) => x.id === Number(id)); if (!rows) return;
+  const mark = (v, ok) => (v == null ? '' : v === ok ? ' ✅' : ' ❌');
+  box.innerHTML = rows.length ? rows.map((r) => `<div><span class="who">${avatar(r, 20)} ${esc(r.nick)}</span><span>${r.pick ? `🟢 ${esc(pickName(m, r.pick))}${mark(r.points, 1)}` : ''}${r.home != null ? ` · 🔴 ${r.home}-${r.away}${mark(r.exact, 1)}` : ''}</span></div>`).join('') : '<div>Nadie pronosticó este partido</div>';
   box.hidden = false;
 }
 function paintThread(card, id) {
@@ -239,28 +249,28 @@ function paintThread(card, id) {
 }
 
 // ---------- ranking ----------
-const rankSeg = (mode) => `<div class="seg"><button data-rank="coins" class="${mode === 'coins' ? 'on' : ''}">🪙 Fichas</button><button data-rank="points" class="${mode === 'points' ? 'on' : ''}">🎯 Puntos</button><button data-rank="prizes" class="${mode === 'prizes' ? 'on' : ''}">💰 Premios</button></div>`;
+const rankSeg = (mode) => `<div class="seg"><button data-rank="coins" class="${mode === 'coins' ? 'on' : ''}">🪙 Fichas</button><button data-rank="points" class="${mode === 'points' ? 'on' : ''}">🎯 Aciertos</button><button data-rank="prizes" class="${mode === 'prizes' ? 'on' : ''}">💰 Premios</button></div>`;
 function board(rows, showPrize) {
-  return `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Pts</th><th>Exactos</th>${showPrize ? '<th>Premio</th>' : ''}</tr></thead><tbody>
-    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.pts}</td><td>${b.exact}</td>${showPrize ? `<td>${b.payout > 0 ? `<span class="win">+${b.payout}</span>` : b.payout === 0 ? '—' : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  return `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Ganadores acertados</th>${showPrize ? '<th>Premio</th>' : ''}</tr></thead><tbody>
+    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.pts}${b.total ? ` / ${b.total}` : ''}</td>${showPrize ? `<td>${b.payout > 0 ? `<span class="win">+${n$(b.payout)}</span>` : b.payout === 0 ? '—' : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
 }
 async function renderPrizes() {
   shell(`${rankSeg('prizes')}<div class="empty">Cargando…</div>`);
   const pots = await api('GET', `/api/groups/${S.gid}/pots`); S.pots = pots;
   const rounds = pots.rounds.filter((r) => r.players > 0 || r.can_join).sort((a, b) => (a.settled - b.settled) || a.first_kickoff.localeCompare(b.first_kickoff));
-  const redBoard = (rows, paid) => `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Marcadores exactos</th>${paid ? '<th>Premio</th>' : ''}</tr></thead><tbody>
-    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.exact}</td>${paid ? `<td>${b.payout > 0 ? `<span class="win">+${n$(b.payout)}</span>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  const redBoard = (rows, paid) => `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Ganadores</th><th>Exactos</th>${paid ? '<th>Premio</th>' : ''}</tr></thead><tbody>
+    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.pts}/${b.total} ${b.eligible ? '✅' : '✖'}</td><td>${b.exact}</td>${paid ? `<td>${b.payout > 0 ? `<span class="win">+${n$(b.payout)}</span>` : '—'}</td>` : ''}</tr>`).join('')}</tbody></table>`;
   const html = `${rankSeg('prizes')}
     <div class="box"><h3>Cómo se gana</h3><p class="help">
-      <b>🟢 Verdes:</b> te anotás a una fecha o ronda y pronosticás todos sus partidos (ganador y resultado exacto). Gana el pozo verde quien suma más puntos.<br>
-      <b>🔴 Rojas:</b> inscripción aparte para el pozo de goles de esa fecha (hay que estar en verde). Gana quien acierta más marcadores exactos. Si nadie acierta ninguno, el pozo pasa acumulado a la fecha siguiente.<br>
+      <b>🟢 Verdes:</b> te anotás a una fecha o ronda y pronosticás <b>quién gana</b> en todos sus partidos. Gana el pozo verde quien acierta más ganadores.<br>
+      <b>🔴 Rojas:</b> inscripción aparte para el pozo de <b>goles</b> de esa fecha (hay que estar en verde). Pronosticás el marcador exacto. Para llevártelo tenés que haber acertado también la mayoría de los ganadores y tener marcadores exactos. Si nadie lo logra, la mitad del pozo queda acumulada para la fecha siguiente y la otra mitad se la queda la casa.<br>
       <b>🟡 Doradas:</b> elegís al campeón del torneo. El pozo se reparte entre quienes aciertan; si nadie acierta, se lo queda la casa.<br>
       Cada color es una billetera aparte y cada pozo se paga en su color. Podés canjear fichas por premios en la pestaña Grupo.</p></div>
     ${pots.champs.map((c) => `<div class="box"><h3>🟡 ${esc(c.comp)} · campeón</h3>${champStrip(c).replace('class="strip gold"', 'class="strip gold flat"')}
       ${c.closed && c.picks.length ? `<table class="std"><thead><tr><th>Jugador</th><th>Eligió</th><th>Premio</th></tr></thead><tbody>${c.picks.map((p) => `<tr><td><span class="who">${avatar(p, 24)}<span>${esc(p.nick)}</span></span></td><td>${esc(p.pick)}</td><td>${p.payout > 0 ? `<span class="win">+${n$(p.payout)}</span>` : '—'}</td></tr>`).join('')}</tbody></table>` : '<p class="help">Las elecciones de los demás se ven cuando se cierra el campeonato. Lo cierra el admin.</p>'}</div>`).join('')}
     ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip green"', 'class="strip green flat"').replace('class="strip red"', 'class="strip red flat"')}
-      ${r.board.length ? `<p class="help" style="margin:4px 0">🟢 Puntos de la fecha</p>${board(r.board, r.settled)}` : ''}
-      ${r.red.board.length ? `<p class="help" style="margin:10px 0 4px">🔴 Pozo de goles</p>${redBoard(r.red.board, r.settled)}` : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
+      ${r.board.length ? `<p class="help" style="margin:4px 0">🟢 Ganadores acertados</p>${board(r.board, r.settled)}` : ''}
+      ${r.red.board.length ? `<p class="help" style="margin:10px 0 4px">🔴 Pozo de goles (✅ = acertó la mayoría de los ganadores)</p>${redBoard(r.red.board, r.settled)}` : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
   shell(html);
 }
 
@@ -278,11 +288,11 @@ async function renderRanking() {
   shell(`${rankSeg(byPts ? 'points' : 'coins')}
     <div class="inline two"><select class="field" id="rkComp"><option value="">Todos los torneos</option>${comps.map((c) => `<option value="${c.id}" ${String(c.id) === R.comp ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
     <select class="field" id="rkRound" ${rounds.length ? '' : 'disabled'}><option value="">Todas las fechas</option>${rounds.map((r) => `<option ${r === R.round ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
-    <table><thead><tr><th>#</th><th>Jugador</th><th>${byPts ? 'Pts' : filtered ? 'Neto' : 'Fichas'}</th><th>${byPts ? 'Exactos' : 'Pts'}</th></tr></thead><tbody>
+    <table><thead><tr><th>#</th><th>Jugador</th><th>${byPts ? 'Aciertos' : filtered ? 'Neto' : 'Fichas'}</th><th>${byPts ? 'Exactos' : 'Aciert.'}</th></tr></thead><tbody>
     ${sorted.map((p, i) => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][i] || i + 1}</td>
       <td><span class="who">${avatar(p, 28)}<span>${esc(p.nick)}${p.fav_team ? `<small>${esc(p.fav_team)}</small>` : ''}</span></span></td>
       <td>${byPts ? p.points : filtered ? `<span class="${p.net > 0 ? 'win' : p.net < 0 ? 'lose' : ''}">${sign(p.net)}</span>` : p.coins.toLocaleString('es-AR')}</td><td>${byPts ? p.exact : p.points}</td></tr>`).join('')}</tbody></table>
-    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Fichas” y “Neto” son de las verdes.'}</p>`);
+    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Aciertos: partidos en los que acertaste quién gana. Exactos: marcadores exactos (🔴). “Fichas” y “Neto” son de las verdes.'}</p>`);
 }
 
 // ---------- tablas ----------
@@ -514,6 +524,7 @@ document.addEventListener('click', async (e) => {
     if (t.dataset.tcomp) { S.tableComp = t.dataset.tcomp; return renderTables(); }
     if (t.dataset.rank) { S.rank.mode = t.dataset.rank; return renderRanking(); }
     if (t.dataset.del) { await api('DELETE', `/api/comments/${t.dataset.del}`); const id = card.dataset.id; S.threads[id] = await api('GET', `/api/matches/${id}/comments?${gq()}`); return paintThread(card, id); }
+    if (t.dataset.pick && card) { card.querySelectorAll('.pick').forEach((b) => b.classList.toggle('on', b === t)); return; }
     if (t.dataset.act === 'save' && card) return saveCard(card, t);
     if (t.dataset.act === 'plays' && card) {
       const id = card.dataset.id, box = card.querySelector('[data-box=plays]');
@@ -638,14 +649,26 @@ document.addEventListener('click', async (e) => {
 });
 
 async function saveCard(card, btn) {
-  const h = card.querySelector('[name=h]').value, a = card.querySelector('[name=a]').value;
-  if (h === '' || a === '') return toast('Completá los dos resultados', true);
+  const pick = card.querySelector('.pick.on')?.dataset.pick;
+  const h = card.querySelector('[name=h]')?.value ?? '', a = card.querySelector('[name=a]')?.value ?? '';
+  if ((h === '') !== (a === '')) return toast('Completá los goles de los dos equipos', true);
+  if (!pick && h === '') return toast('Elegí quién gana', true);
+  const body = {};
+  if (pick) body.pick = pick;
+  if (h !== '') body.prediction = { home: parseInt(h, 10), away: parseInt(a, 10) };
   btn.disabled = true;
-  try {
-    await api('PUT', `/api/matches/${card.dataset.id}/play?${gq()}`, { prediction: { home: parseInt(h, 10), away: parseInt(a, 10) } });
-    toast('¡Pronóstico guardado!'); await loadMatches();
-  } catch (err) { toast(err.message, true); btn.disabled = false; }
+  try { await api('PUT', `/api/matches/${card.dataset.id}/play?${gq()}`, body); toast('¡Pronóstico guardado!'); await loadMatches(); }
+  catch (err) { toast(err.message, true); btn.disabled = false; }
 }
+
+// al escribir un marcador, se marca solo el ganador que corresponde
+document.addEventListener('input', (e) => {
+  const card = e.target.closest?.('.card'); if (!card || !/^[ha]$/.test(e.target.name || '')) return;
+  const h = card.querySelector('[name=h]').value, a = card.querySelector('[name=a]').value;
+  if (h === '' || a === '') return;
+  const k = +h > +a ? 'L' : +h < +a ? 'V' : 'E';
+  card.querySelectorAll('.pick').forEach((b) => b.classList.toggle('on', b.dataset.pick === k));
+});
 
 // al volver a la app o cada minuto en Partidos, traer resultados nuevos
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && S.tab === 'matches') loadMatches(); });

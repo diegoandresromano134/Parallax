@@ -29,9 +29,9 @@ Los precios de inscripción son de ejemplo (**5.000** cada una) y se cambian por
 
 | Color | Qué es | Cómo se gana |
 |---|---|---|
-| 🟢 **Verde** | Inscripción a una **fecha o ronda** de cualquier torneo (liga o copa). Habilita pronosticar **todos** los partidos de esa fecha, con ganador y resultado exacto. Hay que anotarse **antes de que empiece la fecha**. | Gana el pozo verde quien suma más puntos (3 por exacto, 1 por ganador o empate). Desempata quien tuvo más exactos y luego quien erró menos goles. Si siguen empatados, se reparte. |
-| 🔴 **Roja** | Inscripción aparte, por fecha, para el **pozo de goles**. Hay que estar anotado en verde en esa fecha. | Gana quien acierta más **marcadores exactos**. Si nadie acierta ninguno, el pozo **pasa acumulado** a la fecha siguiente del torneo. |
-| 🟡 **Dorada** | Inscripción por **torneo** para elegir al **campeón**. Se puede cambiar la elección hasta que el admin cierre la inscripción. | Lo cierra el admin eligiendo al campeón. El pozo se reparte entre quienes acertaron; si nadie acierta, **se lo queda la casa** (queda registrado en Admin). Las elecciones ajenas se ven recién al cierre. |
+| 🟢 **Verde** | Inscripción a una **fecha o ronda** de cualquier torneo. Permite pronosticar **quién gana** (Local, Empate o Visitante) en todos los partidos de esa fecha. Hay que anotarse **antes de que empiece la fecha**. | Gana el pozo verde quien **acierta más ganadores** en la fecha. Si hay empate, se reparte. |
+| 🔴 **Roja** | Inscripción aparte, por fecha, para el **pozo de goles**. Hay que estar anotado en verde. Se pronostica el **marcador exacto** de cada partido. | Se lo lleva quien **acertó la mayoría de los ganadores de la fecha** (más de la mitad de los partidos jugados) **y** tiene marcadores exactos; gana quien más exactos tiene (desempata menos goles errados). **Si nadie lo logra, la mitad del pozo queda acumulada para la fecha siguiente del torneo y la otra mitad se la queda la casa** (queda registrado en Admin). |
+| 🟡 **Dorada** | Inscripción por **torneo** para elegir al **campeón**. Se puede cambiar la elección hasta que el admin cierre la inscripción. | Lo cierra el admin eligiendo al campeón. El pozo se reparte entre quienes acertaron; si nadie acierta, **se lo queda la casa**. Las elecciones ajenas se ven recién al cierre. |
 
 - Cada pozo se paga en su mismo color. Salir de una fecha antes de que empiece devuelve lo pagado (salir de verde saca también de roja). Una fecha suspendida entera devuelve las inscripciones.
 - Si la fuente no informa la fecha de un partido, ese partido es su propia fecha. Una fecha trabada (partido postergado) la cierra el admin a mano.
@@ -39,7 +39,7 @@ Los precios de inscripción son de ejemplo (**5.000** cada una) y se cambian por
   las fichas se descuentan, y el admin marca la entrega o rechaza (y se devuelven en su color). Los canjes pendientes suman al globito rojo del panel.
 - ⚠️ **Importante:** mientras las fichas solo las carga el admin gratis (a pedido), esto es un juego entre amigos. Si alguna vez se **cobran** fichas con dinero real
   y se entregan premios de valor, pasa a ser un juego de azar/apuestas, que en Argentina está regulado. No lo hagas sin asesoramiento.
-- Ranking → **Premios** muestra los pozos abiertos y quién va ganando en cada color. “Fichas” y “Neto” del ranking son de las verdes.
+- Ranking → **Premios** muestra los pozos abiertos y quién va ganando en cada color. “Fichas” y “Neto” del ranking son de las verdes; “Aciertos” cuenta ganadores acertados y “Exactos” marcadores exactos.
 
 ## Torneos y fixture automático
 El servidor consulta [TheSportsDB](https://www.thesportsdb.com) y detecta solo los torneos argentinos

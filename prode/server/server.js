@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, tx } from './db.js';
-import { START_COINS } from './scoring.js';
+import { START_COINS, outcome } from './scoring.js';
 import { settleMatch } from './settle.js';
 import { discover, syncFixtures, refreshResults, startScheduler } from './sync.js';
 import { seedDemo } from './demo.js';
@@ -132,14 +132,15 @@ const isLocked = (m) => m.status !== 'scheduled' || new Date(m.kickoff) <= new D
 function listMatches(user, gid, q) {
   member(user, gid);
   const results = q.get('scope') === 'results';
-  const where = ['c.enabled=1'], args = [gid, gid, user.id, user.id, gid];
+  const where = ['c.enabled=1'], args = [gid, gid, user.id, gid, user.id, user.id, gid];
   if (q.get('comp')) { where.push('m.comp_id=?'); args.push(Number(q.get('comp'))); }
   where.push(results ? "m.status IN ('finished','cancelled')" : "m.status NOT IN ('finished','cancelled')");
   if (!results) { where.push('m.kickoff > ?'); args.push(new Date(Date.now() - 4 * 3600e3).toISOString()); }
   const rows = db.prepare(`SELECT m.*, c.name AS comp_name, c.kind AS comp_kind, c.entry_fee,
-      p.home AS p_home, p.away AS p_away, p.points AS p_points,
+      p.pick AS p_pick, p.home AS p_home, p.away AS p_away, p.points AS p_points, p.exact AS p_exact,
       (SELECT COUNT(*) FROM comments WHERE match_id=m.id AND group_id=?) AS n_comments,
-      EXISTS(SELECT 1 FROM round_entries e WHERE e.group_id=? AND e.comp_id=m.comp_id AND e.round=m.round AND e.user_id=?) AS enrolled
+      EXISTS(SELECT 1 FROM round_entries e WHERE e.group_id=? AND e.comp_id=m.comp_id AND e.round=m.round AND e.user_id=?) AS enrolled,
+      EXISTS(SELECT 1 FROM red_entries r WHERE r.group_id=? AND r.comp_id=m.comp_id AND r.round=m.round AND r.user_id=?) AS red_enrolled
     FROM matches m JOIN competitions c ON c.id=m.comp_id
     LEFT JOIN predictions p ON p.match_id=m.id AND p.user_id=? AND p.group_id=?
     WHERE ${where.join(' AND ')} ORDER BY m.kickoff ${results ? 'DESC' : 'ASC'} LIMIT ${results ? 60 : 120}`).all(...args);
@@ -147,29 +148,41 @@ function listMatches(user, gid, q) {
     id: m.id, comp_id: m.comp_id, comp: m.comp_name, kind: m.comp_kind, round: m.round, home: m.home, away: m.away,
     home_badge: m.home_badge, away_badge: m.away_badge, kickoff: m.kickoff, status: m.status,
     home_goals: m.home_goals, away_goals: m.away_goals, locked: isLocked(m), comments: m.n_comments,
-    enrolled: !!m.enrolled, fee: m.entry_fee,
-    mine: { prediction: m.p_home == null ? null : { home: m.p_home, away: m.p_away, points: m.p_points } },
+    enrolled: !!m.enrolled, red_enrolled: !!m.red_enrolled, fee: m.entry_fee,
+    mine: { pick: m.p_pick, prediction: m.p_home == null ? null : { home: m.p_home, away: m.p_away }, points: m.p_points, exact: m.p_exact },
   }));
 }
 
-// Para pronosticar hay que estar anotado en la fecha (con fichas). Sin fichas no se juega nada.
+// 🟢 el ganador (pick) exige estar anotado en la fecha con fichas verdes; 🔴 el marcador exacto exige además la inscripción roja.
 function play(user, gid, matchId, body) {
   member(user, gid);
-  if (body.bet !== undefined) throw bad('Ya no hay apuestas por partido: ahora se juega por fecha con pozo.');
+  if (body.bet !== undefined) throw bad('No hay apuestas por partido: se juega por fecha con pozo.');
   return tx(() => {
     const m = db.prepare('SELECT * FROM matches WHERE id=?').get(matchId);
     if (!m) throw new HttpError(404, 'Partido inexistente');
     if (isLocked(m)) throw new HttpError(409, 'El partido ya empezó: no se puede modificar');
-    if (body.prediction === null) {
-      db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
-      return { ok: true };
+    const key = [user.id, gid, m.id];
+    if (body.pick === null) { db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(...key); return { ok: true }; }
+    const green = db.prepare('SELECT 1 FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').get(gid, m.comp_id, m.round, user.id);
+    const red = db.prepare('SELECT 1 FROM red_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').get(gid, m.comp_id, m.round, user.id);
+    if (!green) throw new HttpError(403, 'Para pronosticar tenés que anotarte a la fecha con fichas verdes.');
+    const cur = db.prepare('SELECT * FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').get(...key);
+    let pick = body.pick !== undefined ? body.pick : cur?.pick ?? null;
+    let goals = body.prediction !== undefined ? body.prediction : cur?.home != null ? { home: cur.home, away: cur.away } : null;
+    if (body.pick !== undefined && !['L', 'E', 'V'].includes(pick)) throw bad('Elegí quién gana: local, empate o visitante');
+    if (goals) {
+      if (![goals.home, goals.away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) throw bad('Marcador inválido');
+      if (!red) {
+        if (body.prediction) throw new HttpError(403, 'Para pronosticar los goles exactos tenés que anotarte al pozo de goles con fichas rojas.');
+        goals = null;
+      }
     }
-    if (!db.prepare('SELECT 1 FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').get(gid, m.comp_id, m.round, user.id))
-      throw new HttpError(403, 'Para pronosticar tenés que anotarte a la fecha con fichas.');
-    const { home, away } = body.prediction || {};
-    if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) throw bad('Resultado inválido');
-    db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, home, away) VALUES (?,?,?,?,?)
-      ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, gid, m.id, home, away);
+    if (!pick && goals) pick = outcome(goals.home, goals.away);
+    if (pick && goals && outcome(goals.home, goals.away) !== pick) throw bad('El marcador no coincide con el ganador que elegiste');
+    if (!pick && !goals) { db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(...key); return { ok: true }; }
+    db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, pick, home, away) VALUES (?,?,?,?,?,?)
+      ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET pick=excluded.pick, home=excluded.home, away=excluded.away`)
+      .run(...key, pick, goals?.home ?? null, goals?.away ?? null);
     return { ok: true };
   });
 }
@@ -180,7 +193,7 @@ function ranking(gid, comp, round) {
       COALESCE((SELECT SUM(p.points) FROM predictions p JOIN matches m ON m.id=p.match_id
         WHERE p.user_id=u.id AND p.group_id=?1 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0) AS points,
       (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id=p.match_id
-        WHERE p.user_id=u.id AND p.group_id=?1 AND p.points=3 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)) AS exact,
+        WHERE p.user_id=u.id AND p.group_id=?1 AND p.exact=1 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)) AS exact,
       COALESCE((SELECT SUM(re.payout - re.fee) FROM round_entries re WHERE re.user_id=u.id AND re.group_id=?1 AND re.payout IS NOT NULL
         AND (?2 IS NULL OR re.comp_id=?2) AND (?3 IS NULL OR re.round=?3)), 0)
        AS net
@@ -422,6 +435,7 @@ route('POST', '/api/groups/:gid/rounds/leave-red', ({ user, params, body }) => {
     if (!e) throw bad('No estabas anotado en el pozo de goles');
     if (!roundInfo(gid, user.id, comp, round).can_join) throw bad('La fecha ya empezó: no se puede salir');
     db.prepare('DELETE FROM red_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').run(gid, comp.id, round, user.id);
+    db.prepare('UPDATE predictions SET home=NULL, away=NULL WHERE user_id=? AND group_id=? AND match_id IN (SELECT id FROM matches WHERE comp_id=? AND round=?)').run(user.id, gid, comp.id, round);
     credit(user.id, gid, 'red', e.fee);
     return { ok: true };
   });
@@ -487,7 +501,7 @@ route('GET', '/api/matches/:id/plays', ({ user, params, url }) => {
   const m = db.prepare('SELECT * FROM matches WHERE id=?').get(Number(params.id));
   if (!m) throw new HttpError(404, 'Partido inexistente');
   if (!isLocked(m)) throw new HttpError(409, 'Las jugadas se ven cuando empieza el partido');
-  return db.prepare(`SELECT u.nick, u.avatar, u.color, p.home, p.away, p.points
+  return db.prepare(`SELECT u.nick, u.avatar, u.color, p.pick, p.home, p.away, p.points, p.exact
     FROM predictions p JOIN users u ON u.id=p.user_id WHERE p.group_id=? AND p.match_id=? ORDER BY u.nick`).all(gid, m.id);
 });
 route('GET', '/api/matches/:id/comments', ({ user, params, url }) => {

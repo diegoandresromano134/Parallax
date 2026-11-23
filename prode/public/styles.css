@@ -134,3 +134,7 @@ details.mini summary::after { content: ''; }
 .team-sel { width: auto; padding: 6px 8px; font-size: .8rem; max-width: 100%; }
 @media (max-width: 380px) { .w { padding: 2px 6px; font-size: .7rem; } }
 .strip.green { background: #3ddc8414; border-color: #3ddc84; }
+
+.redgoals { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 10px; border: 1px solid #ff6b6b66; border-radius: 12px; background: #ff6b6b10; font-size: .85rem; }
+.redgoals .score input { width: 40px; height: 40px; font-size: 1.1rem; }
+.pick { font-weight: 600; font-size: .85rem; padding: 12px 4px; }
