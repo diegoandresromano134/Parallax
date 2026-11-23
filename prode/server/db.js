@@ -50,12 +50,6 @@ CREATE TABLE IF NOT EXISTS predictions (
   match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
   home INTEGER NOT NULL, away INTEGER NOT NULL, points INTEGER,
   PRIMARY KEY (user_id, group_id, match_id));
-CREATE TABLE IF NOT EXISTS bets (
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-  match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-  pick TEXT NOT NULL CHECK (pick IN ('L','E','V')), stake INTEGER NOT NULL, payout INTEGER,
-  PRIMARY KEY (user_id, group_id, match_id));
 CREATE TABLE IF NOT EXISTS comments (
   id INTEGER PRIMARY KEY,
   group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -95,6 +89,15 @@ CREATE TABLE IF NOT EXISTS champ_entries (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   fee INTEGER NOT NULL, payout INTEGER, joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   PRIMARY KEY (group_id, comp_id, user_id));
+-- Fichas canjeables por premios que define el admin
+CREATE TABLE IF NOT EXISTS rewards (
+  id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT, cost INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE TABLE IF NOT EXISTS redemptions (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE, reward_id INTEGER,
+  title TEXT NOT NULL, cost INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', -- pending|delivered|rejected
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), resolved_at TEXT);
 CREATE TABLE IF NOT EXISTS notified (
   user_id INTEGER NOT NULL, match_id INTEGER NOT NULL, kind TEXT NOT NULL,
   PRIMARY KEY (user_id, match_id, kind));

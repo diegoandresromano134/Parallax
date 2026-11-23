@@ -112,48 +112,37 @@ function shell(inner) {
 
 // ---------- partidos ----------
 function matchCard(m) {
-  const { prediction: p, bet } = m.mine;
+  const p = m.mine.prediction, g = group();
   const live = m.status === 'live' ? '<span class="live">● EN JUEGO</span>' : m.status === 'postponed' ? '<span class="live">POSTERGADO</span>' : `${fmtTime(m.kickoff)} hs`;
-  const total = m.pool.L.total + m.pool.E.total + m.pool.V.total;
   const header = `<div class="meta"><span>${esc(m.comp)}${m.round ? ' · ' + esc(m.round) : ''}</span><span>${live}</span></div>`;
   const team = (n, b) => `<div class="team">${badge(b, n)}<span>${esc(n)}</span></div>`;
   const footer = `<div class="foot"><button class="ghost" data-act="chat">💬 Comentarios${m.comments ? ` (${m.comments})` : ''}</button>${m.locked || m.status === 'finished' ? '<button class="ghost" data-act="plays">Jugadas del grupo</button>' : ''}</div>
     <div class="plays" data-box="plays" hidden></div><div class="thread" data-box="thread" hidden></div>`;
+  const teams = (mid) => `<div class="teams">${team(m.home, m.home_badge)}${mid}${team(m.away, m.away_badge)}</div>`;
 
   if (m.status === 'finished' || m.status === 'cancelled') {
-    const lines = [];
-    if (p) lines.push(`Tu pronóstico: <b>${p.home}-${p.away}</b> → <span class="pts-${p.points ?? 0}">${p.points == null ? '' : p.points + (p.points === 1 ? ' punto' : ' puntos')}</span>`);
-    if (bet) {
-      const net = (bet.payout ?? 0) - bet.stake;
-      lines.push(`Tu apuesta: ${bet.stake} 🪙 a <b>${esc(pickName(m, bet.pick))}</b> → ` + (bet.payout == null ? '' : m.status === 'cancelled' ? 'devuelta' : net > 0 ? `<span class="win">+${net} 🪙</span>` : net === 0 ? 'te devolvieron las fichas' : `<span class="lose">${net} 🪙</span>`));
-    }
-    return `<article class="card" data-id="${m.id}">${header}<div class="teams">${team(m.home, m.home_badge)}<div class="score final">${m.status === 'cancelled' ? 'Susp.' : `${m.home_goals} - ${m.away_goals}`}</div>${team(m.away, m.away_badge)}</div>
-      <div class="result">${lines.length ? lines.map((l) => `<div>${l}</div>`).join('') : '<div>No jugaste este partido</div>'}</div>${footer}</article>`;
+    const line = p ? `Tu pronóstico: <b>${p.home}-${p.away}</b> → <span class="pts-${p.points ?? 0}">${p.points == null ? '' : p.points + (p.points === 1 ? ' punto' : ' puntos')}</span>`
+      : m.enrolled ? 'No pronosticaste este partido' : 'No participaste en esta fecha';
+    return `<article class="card" data-id="${m.id}">${header}${teams(`<div class="score final">${m.status === 'cancelled' ? 'Susp.' : `${m.home_goals} - ${m.away_goals}`}</div>`)}<div class="result"><div>${line}</div></div>${footer}</article>`;
   }
   if (m.locked) {
-    return `<article class="card" data-id="${m.id}">${header}<div class="teams">${team(m.home, m.home_badge)}<div class="score final">${m.home_goals ?? '·'} - ${m.away_goals ?? '·'}</div>${team(m.away, m.away_badge)}</div>
-      <div class="result"><div>🔒 Cerrado. ${p ? `Tu pronóstico: <b>${p.home}-${p.away}</b>.` : 'No pronosticaste.'} ${bet ? `Apostaste ${bet.stake} 🪙 a <b>${esc(pickName(m, bet.pick))}</b>.` : ''}</div>${m.kind === 'league' ? '' : `<div>Pozo en juego: <b>${total} 🪙</b></div>`}</div>${footer}</article>`;
+    return `<article class="card" data-id="${m.id}">${header}${teams(`<div class="score final">${m.home_goals ?? '·'} - ${m.away_goals ?? '·'}</div>`)}
+      <div class="result"><div>🔒 Cerrado. ${p ? `Tu pronóstico: <b>${p.home}-${p.away}</b>.` : m.enrolled ? 'No pronosticaste.' : 'No participás en esta fecha.'}</div></div>${footer}</article>`;
   }
-  if (m.kind === 'league') {
-    return `<article class="card" data-id="${m.id}">${header}
-      <div class="teams">${team(m.home, m.home_badge)}
-        <div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
-        <span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div>${team(m.away, m.away_badge)}</div>
-      <button class="primary" data-act="save">Guardar pronóstico</button>
-      <div class="help">${p ? 'Podés cambiarlo hasta que empiece el partido. ' : ''}Suma 3 puntos si acertás el resultado exacto y 1 si acertás ganador o empate.</div>${footer}</article>`;
+  if (!m.enrolled) {
+    const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round), fee = m.fee, falta = fee - g.coins;
+    const cta = !r ? '<div class="help">La inscripción a esta fecha todavía no está disponible.</div>'
+      : !r.can_join ? '<div class="help">La fecha ya empezó: no se puede anotar.</div>'
+      : falta > 0 ? `<div class="help"><b>Te faltan ${falta} fichas</b> para anotarte (${fee} 🪙). Sin fichas no se puede jugar: <button class="link" data-tab="group">pedile fichas al admin</button>.</div>`
+      : `<button class="primary" data-join="${m.comp_id}" data-round="${esc(m.round)}">${fee ? `Anotarme a la fecha (${fee} 🪙)` : 'Anotarme (gratis)'}</button>`;
+    return `<article class="card" data-id="${m.id}">${header}${teams('<div class="score final">- : -</div>')}
+      <div class="help" style="text-align:center">🔒 Para pronosticar tenés que anotarte a esta fecha.</div>${cta}${footer}</article>`;
   }
-  const sel = bet?.pick;
-  const pick = (k) => `<button class="pick ${sel === k ? 'on' : ''}" data-pick="${k}">${esc(pickName(m, k))}<small>${m.pool[k].total ? `${m.pool[k].total} 🪙 · ${m.pool[k].n}` : 'sin apuestas'}</small></button>`;
-  return `<article class="card" data-id="${m.id}" data-old="${bet?.stake ?? 0}">${header}
-    <div class="teams">${team(m.home, m.home_badge)}
-      <div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
-      <span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div>${team(m.away, m.away_badge)}</div>
-    <div class="picks">${['L', 'E', 'V'].map(pick).join('')}</div>
-    <div class="stake"><span class="help">Apuesta:</span>
-      <input name="stake" type="number" inputmode="numeric" min="10" step="10" value="${bet?.stake ?? ''}" placeholder="fichas">
-      ${[50, 100, 250].map((n) => `<button class="q" data-q="${n}">${n}</button>`).join('')}<button class="q" data-q="max">Todo</button></div>
-    <button class="primary" data-act="save">Guardar jugada</button>
-    ${p || bet ? '<div class="help">Podés cambiarla hasta que empiece el partido.</div>' : ''}${footer}</article>`;
+  return `<article class="card" data-id="${m.id}">${header}
+    ${teams(`<div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
+      <span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div>`)}
+    <button class="primary" data-act="save">Guardar pronóstico</button>
+    <div class="help">${p ? 'Podés cambiarlo hasta que empiece el partido. ' : ''}3 puntos por resultado exacto, 1 por acertar ganador o empate.</div>${footer}</article>`;
 }
 
 function roundStrip(r) {
@@ -177,7 +166,7 @@ function champStrip(c) {
 function renderMatches() {
   const chips = [['', 'Todos'], ...S.comps.map((c) => [String(c.id), c.name])];
   const g = group();
-  let html = g.coins < 10 ? `<div class="notice"><b>No tenés fichas para apostar.</b> Igual podés pronosticar resultados y sumar puntos. Para apostar, <button class="link" data-tab="group">pedile fichas al admin</button>.</div>` : '';
+  let html = g.coins < 1 ? `<div class="notice"><b>No tenés fichas.</b> Sin fichas no podés participar en ningún torneo. <button class="link" data-tab="group">Pedile fichas al admin</button>.</div>` : '';
   html += `<div class="seg"><button data-scope="upcoming" class="${S.scope === 'upcoming' ? 'on' : ''}">Próximos</button><button data-scope="results" class="${S.scope === 'results' ? 'on' : ''}">Resultados</button></div>
     <div class="chips">${chips.map(([id, n]) => `<button class="chip ${S.comp === id ? 'on' : ''}" data-comp="${id}">${esc(n)}</button>`).join('')}</div>`;
   if (S.loading && !S.matches.length) html += '<div class="empty">Cargando…</div>';
@@ -188,7 +177,7 @@ function renderMatches() {
     for (const m of S.matches) {
       const k = dayKey(m.kickoff);
       if (k !== last) { html += `<h2 class="day">${esc(fmtDay(m.kickoff))}</h2>`; last = k; }
-      if (m.kind === 'league' && m.round && `${m.comp_id}|${m.round}` !== lastRound) {
+      if (m.round && `${m.comp_id}|${m.round}` !== lastRound) {
         lastRound = `${m.comp_id}|${m.round}`;
         const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round);
         if (r) html += `<div class="roundhead">${esc(m.comp)} · ${esc(m.round)}</div>${roundStrip(r)}`;
@@ -222,8 +211,7 @@ async function loadMatches() {
 
 function paintPlays(card, id) {
   const box = card.querySelector('[data-box=plays]'), rows = S.plays[id]; if (!rows) return;
-  const pn = (r) => (r.pick === 'L' ? 'Local' : r.pick === 'V' ? 'Visit.' : 'Empate');
-  box.innerHTML = rows.length ? rows.map((r) => `<div><span class="who">${avatar(r, 20)} ${esc(r.nick)}</span><span>${r.home != null ? `${r.home}-${r.away}` : '—'}${r.pick ? ` · ${r.stake}🪙 ${pn(r)}` : ''}${r.points != null ? ` · <span class="pts-${r.points}">${r.points} pt</span>` : ''}${r.payout != null && r.payout !== r.stake ? ` · ${r.payout > r.stake ? `<span class="win">+${r.payout - r.stake}</span>` : `<span class="lose">-${r.stake}</span>`}` : ''}</span></div>`).join('') : '<div>Nadie jugó este partido</div>';
+  box.innerHTML = rows.length ? rows.map((r) => `<div><span class="who">${avatar(r, 20)} ${esc(r.nick)}</span><span>${r.home}-${r.away}${r.points != null ? ` · <span class="pts-${r.points}">${r.points} pt</span>` : ''}</span></div>`).join('') : '<div>Nadie pronosticó este partido</div>';
   box.hidden = false;
 }
 function paintThread(card, id) {
@@ -244,11 +232,11 @@ async function renderPrizes() {
   const pots = await api('GET', `/api/groups/${S.gid}/pots`); S.pots = pots;
   const rounds = pots.rounds.filter((r) => r.players > 0 || r.can_join).sort((a, b) => (a.settled - b.settled) || a.first_kickoff.localeCompare(b.first_kickoff));
   const html = `${rankSeg('prizes')}
-    <div class="box"><h3>Cómo se gana</h3><p class="help"><b>Ligas:</b> cada fecha tiene un pozo. Te anotás antes de que empiece, y se lo lleva quien suma más puntos en todos los partidos de la fecha (desempata quien tuvo más resultados exactos y luego quien erró menos goles).<br>
-      <b>Copas:</b> cada partido tiene su pozo de apuestas, y además hay un pozo del campeonato que se reparte al final entre quienes acumularon más puntos.</p></div>
+    <div class="box"><h3>Cómo se gana</h3><p class="help">Todos los torneos funcionan igual: cada fecha o ronda tiene un pozo. Te anotás antes de que empiece pagando la inscripción en fichas (sin fichas no se juega), pronosticás sus partidos y se lo lleva quien suma más puntos (desempata quien tuvo más resultados exactos y luego quien erró menos goles).<br>
+      <b>Copas:</b> además hay un pozo del campeonato que se reparte al final entre quienes acumularon más puntos. Las fichas que ganes las podés canjear por premios en la pestaña Grupo.</p></div>
     ${pots.champs.map((c) => `<div class="box"><h3>🏆 ${esc(c.comp)} · campeonato</h3>${champStrip(c).replace('class="strip cup"', 'class="strip cup flat"')}
       ${c.board.length ? board(c.board, c.closed) : '<p class="help">Todavía no hay anotados.</p>'}
-      <p class="help">Suman los partidos que empiezan después de anotarte. Lo cierra el admin cuando termina el torneo.</p></div>`).join('')}
+      <p class="help">Suman los partidos que empiezan después de anotarte (y en los que estés anotado a la fecha). Lo cierra el admin cuando termina el torneo.</p></div>`).join('')}
     ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip"', 'class="strip flat"')}${r.board.length ? board(r.board, r.settled) : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
   shell(html);
 }
@@ -271,7 +259,7 @@ async function renderRanking() {
     ${sorted.map((p, i) => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][i] || i + 1}</td>
       <td><span class="who">${avatar(p, 28)}<span>${esc(p.nick)}${p.fav_team ? `<small>${esc(p.fav_team)}</small>` : ''}</span></span></td>
       <td>${byPts ? p.points : filtered ? `<span class="${p.net > 0 ? 'win' : p.net < 0 ? 'lose' : ''}">${sign(p.net)}</span>` : p.coins.toLocaleString('es-AR')}</td><td>${byPts ? p.exact : p.points}</td></tr>`).join('')}</tbody></table>
-    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Neto” suma apuestas, pozos de fecha y campeonato.'}</p>`);
+    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Neto” suma lo ganado y perdido en pozos de fecha y de campeonato.'}</p>`);
 }
 
 // ---------- tablas ----------
@@ -295,13 +283,19 @@ async function renderGroup() {
   shell('<div class="empty">Cargando…</div>');
   const members = await api('GET', `/api/groups/${g.id}/members`);
   const share = `${location.origin}/?codigo=${g.code}`;
-  const reqs = await api('GET', `/api/groups/${g.id}/coin-requests`);
+  const [reqs, rewards, reds] = await Promise.all([api('GET', `/api/groups/${g.id}/coin-requests`), api('GET', '/api/rewards'), api('GET', `/api/groups/${g.id}/redemptions`)]);
+  const rst = { pending: '⏳ Pendiente de entrega', delivered: '✅ Entregado', rejected: '↩️ Devuelto' };
   const st = { pending: '⏳ Esperando al admin', approved: '✅ Aprobado', rejected: '❌ No aprobado' };
   shell(`<div class="box"><h3>Mis fichas: 🪙 ${g.coins.toLocaleString('es-AR')}</h3>
       <p class="help">Las fichas las carga solo el administrador, a pedido. Decile cuántas querés y se las carga cuando pueda.</p>
       <form id="reqForm"><div class="inline two"><input class="field" name="amount" type="number" inputmode="numeric" min="10" placeholder="¿Cuántas fichas?"><button class="primary nomargin" type="submit">Pedir fichas</button></div>
       <input class="field" name="note" maxlength="200" placeholder="Mensaje para el admin (opcional)" style="margin-top:8px"></form>
       ${reqs.length ? `<div style="margin-top:10px">${reqs.map((r) => `<div class="row"><div>${r.amount.toLocaleString('es-AR')} fichas<small>${st[r.status]}${r.status === 'approved' && r.granted !== r.amount ? ` · te cargaron ${r.granted}` : ''}</small></div><small>${fmtAgo(r.created_at)}</small></div>`).join('')}</div>` : ''}</div>
+    <div class="box"><h3>🎁 Canjear fichas por premios</h3>
+      ${rewards.length ? rewards.map((r) => `<div class="row"><div>${esc(r.title)}${r.description ? `<small>${esc(r.description)}</small>` : ''}</div>
+        <button class="${g.coins >= r.cost ? 'mini-btn' : 'ghost'}" data-redeem="${r.id}" data-t="${esc(r.title)}" data-c="${r.cost}" ${g.coins >= r.cost ? '' : 'disabled'}>${r.cost.toLocaleString('es-AR')} 🪙</button></div>`).join('') : '<p class="help">El admin todavía no cargó premios para canjear.</p>'}
+      ${reds.length ? `<div style="margin-top:10px">${reds.map((r) => `<div class="row"><div>${esc(r.title)}<small>${rst[r.status]}</small></div><small>${r.cost} 🪙</small></div>`).join('')}</div>` : ''}
+      <p class="help">Las fichas se descuentan al canjear. El admin coordina la entrega con vos.</p></div>
     <div class="box"><h3>Invitá a tus amigos</h3><div class="code">${esc(g.code)}</div>
       <p class="help">Pasales este código (o el link). Lo ponen al crear su cuenta o en “Unirme con un código”.</p>
       <div class="inline two"><button class="ghost" data-copy="${esc(g.code)}">Copiar código</button><button class="ghost" data-share="${esc(share)}" data-name="${esc(g.name)}">Compartir link</button></div></div>
@@ -353,9 +347,10 @@ async function renderProfile() {
 
 async function renderAdmin() {
   shell('<div class="empty">Cargando…</div>');
-  const [ov, reqs, users, ledger, pending, pots] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
-    api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches'), api('GET', '/api/admin/pots')]);
-  S.adminPending = reqs.length; S.admin = ov;
+  const [ov, reqs, users, ledger, pending, pots, rewards, reds] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
+    api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches'), api('GET', '/api/admin/pots'),
+    api('GET', '/api/admin/rewards'), api('GET', '/api/admin/redemptions')]);
+  S.adminPending = reqs.length + reds.length; S.admin = ov;
   const comps = ov.competitions, src = ov.source, g0 = ov.groups[0];
   const sec = (title, body, open) => `<details class="box" ${open ? 'open' : ''}><summary><b>${title}</b></summary><div style="margin-top:10px">${body}</div></details>`;
   shell(`<p class="help" style="margin:0 0 10px">Solo vos ves esta pantalla. Acá manejás las fichas, la suscripción de datos y los torneos de todos los grupos.</p>
@@ -363,6 +358,12 @@ async function renderAdmin() {
         <div class="who"><b>${esc(r.nick)}</b><small>${esc(r.group_name)} · tiene ${r.coins} fichas · ${fmtAgo(r.created_at)}</small></div>
         ${r.note ? `<p class="help">“${esc(r.note)}”</p>` : ''}
         <div class="inline two" style="margin-top:6px"><input class="field" name="amt" type="number" min="1" value="${r.amount}" aria-label="Fichas a cargar"><div class="two"><button class="primary nomargin" data-act="reqOk">Cargar</button><button class="ghost" data-act="reqNo">Rechazar</button></div></div></div>`).join('') : '<p class="help">No hay pedidos pendientes.</p>', true)}
+    ${sec(`Canjes pendientes${reds.length ? ` (${reds.length})` : ''}`, reds.length ? reds.map((r) => `<div class="req" data-did="${r.id}"><div class="who"><b>${esc(r.title)}</b><small>${esc(r.nick)} · ${esc(r.group_name)} · ${r.cost} fichas · ${fmtAgo(r.created_at)}<br>${esc(r.email)}</small></div>
+        <div class="two" style="margin-top:6px"><button class="primary nomargin" data-act="redOk">Marcar entregado</button><button class="ghost" data-act="redNo">Rechazar y devolver</button></div></div>`).join('') : '<p class="help">No hay canjes pendientes.</p>', reds.length > 0)}
+    ${sec('Premios para canjear', `<p class="help" style="margin-top:0">Lo que definas acá aparece en la pestaña Grupo de todos los jugadores. Al canjear se descuentan las fichas.</p>
+        ${rewards.map((r) => `<div class="comprow" data-rwid="${r.id}"><div class="row"><div>${esc(r.title)}<small>${r.cost.toLocaleString('es-AR')} fichas · ${r.active ? 'visible' : 'oculto'}</small></div><input class="switch" type="checkbox" data-rw-toggle="${r.id}" ${r.active ? 'checked' : ''} aria-label="Mostrar ${esc(r.title)}"></div>
+          <details class="mini"><summary>Editar</summary><div class="inline"><input class="field" name="title" value="${esc(r.title)}" maxlength="80"><input class="field" name="description" value="${esc(r.description || '')}" placeholder="Descripción (opcional)" maxlength="300"><input class="field" name="cost" type="number" min="1" value="${r.cost}"><button class="ghost" data-act="rwSave">Guardar premio</button></div></details></div>`).join('')}
+        <h3 style="margin-top:12px">Nuevo premio</h3><div class="inline"><input class="field" id="rwTitle" placeholder="Premio (ej: Asado para dos)" maxlength="80"><input class="field" id="rwDesc" placeholder="Descripción (opcional)" maxlength="300"><input class="field" id="rwCost" type="number" min="1" placeholder="Costo en fichas"><button class="primary nomargin" data-act="rwNew">Agregar premio</button></div>`)}
     ${sec('Cargar fichas directo', ov.groups.length ? `<div class="inline"><select class="field" id="grGroup">${ov.groups.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>
         <select class="field" id="grUser">${g0.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (${m.coins})</option>`).join('')}</select>
         <input class="field" id="grAmt" type="number" inputmode="numeric" placeholder="Fichas (con - para restar)"><input class="field" id="grWhy" placeholder="Motivo (opcional)" maxlength="100">
@@ -457,7 +458,8 @@ document.addEventListener('change', async (e) => {
     else if (t.id === 'photo' && t.files[0]) {
       const data = await resizePhoto(t.files[0]);
       applyBundle(await api('PATCH', '/api/me', { avatar: data })); toast('Foto actualizada'); render();
-    } else if (t.dataset.compToggle) { await api('PATCH', `/api/admin/competitions/${t.dataset.compToggle}`, { enabled: t.checked }); toast('Listo'); }
+    } else if (t.dataset.rwToggle) { await api('PATCH', `/api/admin/rewards/${t.dataset.rwToggle}`, { active: t.checked }); toast('Listo'); }
+    else if (t.dataset.compToggle) { await api('PATCH', `/api/admin/competitions/${t.dataset.compToggle}`, { enabled: t.checked }); toast('Listo'); }
   } catch (err) { toast(err.message, true); }
 });
 
@@ -484,8 +486,6 @@ document.addEventListener('click', async (e) => {
     if (t.classList.contains('chip') && t.dataset.comp !== undefined) { S.comp = t.dataset.comp; S.matches = []; renderMatches(); return loadMatches(); }
     if (t.dataset.tcomp) { S.tableComp = t.dataset.tcomp; return renderTables(); }
     if (t.dataset.rank) { S.rank.mode = t.dataset.rank; return renderRanking(); }
-    if (t.dataset.pick && card) { card.querySelectorAll('.pick').forEach((b) => b.classList.toggle('on', b === t)); return; }
-    if (t.dataset.q && card) { card.querySelector('[name=stake]').value = t.dataset.q === 'max' ? group().coins + (Number(card.dataset.old) || 0) : t.dataset.q; return; }
     if (t.dataset.del) { await api('DELETE', `/api/comments/${t.dataset.del}`); const id = card.dataset.id; S.threads[id] = await api('GET', `/api/matches/${id}/comments?${gq()}`); return paintThread(card, id); }
     if (t.dataset.act === 'save' && card) return saveCard(card, t);
     if (t.dataset.act === 'plays' && card) {
@@ -512,6 +512,22 @@ document.addEventListener('click', async (e) => {
       if (navigator.share) { try { await navigator.share({ title: 'PRODE Amigos', text: `Sumate a "${t.dataset.name}" en PRODE Amigos`, url: t.dataset.share }); } catch { /* canceló */ } }
       else { try { await navigator.clipboard.writeText(t.dataset.share); toast('Link copiado'); } catch { toast(t.dataset.share); } }
       return;
+    }
+    if (t.dataset.redeem) {
+      if (!confirm(`¿Canjear "${t.dataset.t}" por ${t.dataset.c} fichas?`)) return;
+      await api('POST', `/api/groups/${S.gid}/redeem`, { reward_id: Number(t.dataset.redeem) }); toast('¡Canje enviado! El admin te avisa.'); applyBundle(await api('GET', '/api/me')); return render();
+    }
+    if (t.dataset.act === 'redOk' || t.dataset.act === 'redNo') {
+      const id = t.closest('[data-did]').dataset.did;
+      await api('POST', `/api/admin/redemptions/${id}`, { action: t.dataset.act === 'redOk' ? 'deliver' : 'reject' }); toast(t.dataset.act === 'redOk' ? 'Marcado como entregado' : 'Canje rechazado, fichas devueltas'); return render();
+    }
+    if (t.dataset.act === 'rwNew') {
+      const v = (id) => document.getElementById(id).value;
+      await api('POST', '/api/admin/rewards', { title: v('rwTitle'), description: v('rwDesc'), cost: Number(v('rwCost')) }); toast('Premio agregado'); return render();
+    }
+    if (t.dataset.act === 'rwSave') {
+      const row = t.closest('[data-rwid]'), v = (n) => row.querySelector(`[name=${n}]`).value;
+      await api('PATCH', `/api/admin/rewards/${row.dataset.rwid}`, { title: v('title'), description: v('description'), cost: Number(v('cost')) }); toast('Premio guardado'); return render();
     }
     if (t.dataset.join) { await api('POST', `/api/groups/${S.gid}/rounds/join`, { comp_id: Number(t.dataset.join), round: t.dataset.round }); toast('¡Anotado en la fecha!'); return loadMatches(); }
     if (t.dataset.leave) { await api('POST', `/api/groups/${S.gid}/rounds/leave`, { comp_id: Number(t.dataset.leave), round: t.dataset.round }); toast('Inscripción devuelta'); return loadMatches(); }
@@ -587,20 +603,12 @@ document.addEventListener('click', async (e) => {
 
 async function saveCard(card, btn) {
   const h = card.querySelector('[name=h]').value, a = card.querySelector('[name=a]').value;
-  const stake = parseInt(card.querySelector('[name=stake]')?.value, 10), pick = card.querySelector('.pick.on')?.dataset.pick;
-  const body = {};
-  if (h !== '' || a !== '') {
-    if (h === '' || a === '') return toast('Completá los dos resultados', true);
-    body.prediction = { home: parseInt(h, 10), away: parseInt(a, 10) };
-  }
-  if (pick || stake) {
-    if (!pick || !stake) return toast('Elegí a quién apostás y cuántas fichas', true);
-    body.bet = { pick, stake };
-  } else body.bet = null;
-  if (!body.prediction && !body.bet) return toast('No cargaste nada para guardar', true);
+  if (h === '' || a === '') return toast('Completá los dos resultados', true);
   btn.disabled = true;
-  try { await api('PUT', `/api/matches/${card.dataset.id}/play?${gq()}`, body); toast('¡Jugada guardada!'); await loadMatches(); }
-  catch (err) { toast(err.message, true); btn.disabled = false; }
+  try {
+    await api('PUT', `/api/matches/${card.dataset.id}/play?${gq()}`, { prediction: { home: parseInt(h, 10), away: parseInt(a, 10) } });
+    toast('¡Pronóstico guardado!'); await loadMatches();
+  } catch (err) { toast(err.message, true); btn.disabled = false; }
 }
 
 // al volver a la app o cada minuto en Partidos, traer resultados nuevos

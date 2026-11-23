@@ -23,6 +23,32 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 - Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
 - **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
 
+## Cómo se juega (todos los torneos igual)
+- **Sin fichas no se juega nada.** Para pronosticar los partidos de una fecha o ronda hay que anotarse **antes de que empiece**, pagando la inscripción en fichas
+  (100 por defecto, editable por torneo en Admin). Si no alcanzan las fichas, no hay inscripción y no se puede pronosticar.
+- **Pozo por fecha:** las inscripciones forman el pozo. Cuando terminan todos los partidos de la fecha, se lo lleva quien sumó más puntos
+  (3 por resultado exacto, 1 por ganador o empate). Desempata quien tuvo más exactos y luego quien erró menos goles (un partido sin pronóstico cuenta como error grande).
+  Si siguen empatados, se reparte. Si una fecha se suspende entera, se devuelven las inscripciones.
+- **Copas** (Libertadores, Sudamericana, Copa Argentina, Recopa, Supercopa) funcionan igual por ronda y suman un **pozo de campeonato** (300 por defecto) que se reparte al final
+  entre quienes acumularon más puntos. Solo cuentan los partidos que empiezan después de anotarse. **Lo cierra el admin** (Admin → Premios en juego → Cerrar y repartir).
+- Si la fuente no informa la fecha de un partido, ese partido es su propia fecha.
+- Una fecha trabada (por ejemplo, un partido postergado) la cierra el admin a mano.
+- **Canje:** las fichas se canjean por premios que define el admin (Admin → Premios para canjear: nombre, descripción y costo). El jugador canjea desde la pestaña Grupo,
+  las fichas se descuentan, y el admin marca la entrega o rechaza (y se devuelven). Los canjes pendientes suman al globito rojo del panel.
+- ⚠️ **Importante:** mientras las fichas solo las carga el admin gratis (a pedido), esto es un juego entre amigos. Si alguna vez se **cobran** fichas con dinero real
+  y se entregan premios de valor, pasa a ser un juego de azar/apuestas, que en Argentina está regulado. No lo hagas sin asesoramiento.
+- Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
+
+## Cuentas y grupos
+- **Ingreso obligatorio:** sin cuenta no se puede ver ni jugar nada.
+- **Registro:** nombre, apellido, apodo, mail, fecha de nacimiento, contraseña (8+ con letras y números) y aceptar las reglas. **Solo mayores de 16**: se calcula con la fecha de nacimiento y se valida en el servidor.
+  La edad es declarada, la app no puede verificarla. El mail no se verifica por correo (no hay servicio de mail configurado).
+- **Olvidé mi contraseña:** quien creó el grupo (o el admin) le pone una clave temporal (pestaña Grupo → Clave). El creador del grupo solo maneja nombre, color, código y claves de su grupo, no las fichas.
+- **Varios grupos:** cada grupo tiene su código/link, sus fichas, su pozo, su ranking y sus comentarios. Se puede estar en varios.
+- **Perfil:** foto, color, equipo favorito, cambio de contraseña y avisos en el celular.
+- Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
+- **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
+
 ## Premios: ligas por fecha, copas por partido y campeonato
 - **Ligas** (Liga Profesional, Primera Nacional…): se juega por **fecha**. Los jugadores se anotan al pozo de la fecha pagando una inscripción en fichas
   (100 por defecto) **antes de que empiece la fecha**. Cuando terminan todos sus partidos gana quien suma más puntos; desempata quien tuvo más resultados
@@ -33,14 +59,6 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 - El tipo de torneo se detecta por el nombre y se cambia en Admin → Torneos → Premios de este torneo, donde también se editan las inscripciones (0 = sin pozo).
 - Una fecha trabada (por ejemplo, un partido postergado) se cierra a mano desde el panel. Una fecha suspendida entera devuelve las inscripciones.
 - Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
-
-## Cómo se juega
-- **Pronóstico (PRODE clásico):** ponés el resultado. Exacto = **3 puntos**, acertar ganador/empate = **1 punto**.
-- **Apuesta ficticia (solo en copas):** elegís Local / Empate / Visitante y apostás fichas (las carga el admin a pedido).
-  Las fichas de todos forman un **pozo** que se reparte entre quienes acertaron, según cuánto puso cada uno.
-  Si nadie acierta (o se suspende el partido) se devuelven las fichas.
-- Todo se **cierra cuando arranca el partido**; ahí se ven las jugadas de los demás.
-- Hay dos rankings: por **fichas** y por **puntos del PRODE**.
 
 ## Torneos y fixture automático
 El servidor consulta [TheSportsDB](https://www.thesportsdb.com) y detecta solo los torneos argentinos

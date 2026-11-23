@@ -1,14 +1,15 @@
 // Premios en fichas.
 //  - Ligas: pozo por FECHA. Se anotan antes de que empiece la fecha; gana quien suma más puntos
 //    en todos los partidos de esa fecha (desempate: más resultados exactos, luego menos goles errados).
-//  - Copas: premio por partido (apuestas a pozo, ver settle.js) y pozo del CAMPEONATO por puntos acumulados.
+//  - Copas: igual que las ligas (pozo por ronda) y además un pozo del CAMPEONATO por puntos acumulados.
 import { db } from './db.js';
 import { enqueueForUser } from './push.js';
 
 export const CUP_RE = /libertadores|sudamericana|copa argentina|recopa|supercopa|trofeo de campeones/i;
 /** Tipo de torneo según el nombre: copas por eliminación vs ligas por fecha. */
 export const kindFor = (name) => (CUP_RE.test(name) ? 'cup' : 'league');
-export const defaultFees = (kind) => (kind === 'cup' ? { entry_fee: 0, champ_fee: 300 } : { entry_fee: 100, champ_fee: 0 });
+// Todos los torneos funcionan igual: inscripción en fichas por fecha. Las copas suman además un pozo de campeonato.
+export const defaultFees = (kind) => (kind === 'cup' ? { entry_fee: 100, champ_fee: 300 } : { entry_fee: 100, champ_fee: 0 });
 
 /** Ordena a los participantes: puntos, luego exactos, luego menor error de goles. */
 export function rankEntrants(list) {

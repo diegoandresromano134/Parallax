@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, tx } from './db.js';
-import { START_COINS, MIN_STAKE } from './scoring.js';
+import { START_COINS } from './scoring.js';
 import { settleMatch } from './settle.js';
 import { discover, syncFixtures, refreshResults, startScheduler } from './sync.js';
 import { seedDemo } from './demo.js';
@@ -122,7 +122,7 @@ function myGroups(user) {
 }
 const meBundle = (u) => ({
   user: publicUser(u), groups: myGroups(u),
-  ...(u.is_admin && { admin_pending: db.prepare("SELECT COUNT(*) AS n FROM coin_requests WHERE status='pending'").get().n }),
+  ...(u.is_admin && { admin_pending: db.prepare("SELECT (SELECT COUNT(*) FROM coin_requests WHERE status='pending') + (SELECT COUNT(*) FROM redemptions WHERE status='pending') AS n").get().n }),
 });
 
 // ---------- partidos ----------
@@ -131,74 +131,45 @@ const isLocked = (m) => m.status !== 'scheduled' || new Date(m.kickoff) <= new D
 function listMatches(user, gid, q) {
   member(user, gid);
   const results = q.get('scope') === 'results';
-  const where = ['c.enabled=1'];
-  const args = [user.id, gid, user.id, gid, gid];
+  const where = ['c.enabled=1'], args = [gid, gid, user.id, user.id, gid];
   if (q.get('comp')) { where.push('m.comp_id=?'); args.push(Number(q.get('comp'))); }
   where.push(results ? "m.status IN ('finished','cancelled')" : "m.status NOT IN ('finished','cancelled')");
   if (!results) { where.push('m.kickoff > ?'); args.push(new Date(Date.now() - 4 * 3600e3).toISOString()); }
-  const rows = db.prepare(`SELECT m.*, c.name AS comp_name, c.kind AS comp_kind,
+  const rows = db.prepare(`SELECT m.*, c.name AS comp_name, c.kind AS comp_kind, c.entry_fee,
       p.home AS p_home, p.away AS p_away, p.points AS p_points,
-      b.pick AS b_pick, b.stake AS b_stake, b.payout AS b_payout,
-      (SELECT COUNT(*) FROM comments WHERE match_id=m.id AND group_id=?) AS n_comments
+      (SELECT COUNT(*) FROM comments WHERE match_id=m.id AND group_id=?) AS n_comments,
+      EXISTS(SELECT 1 FROM round_entries e WHERE e.group_id=? AND e.comp_id=m.comp_id AND e.round=m.round AND e.user_id=?) AS enrolled
     FROM matches m JOIN competitions c ON c.id=m.comp_id
     LEFT JOIN predictions p ON p.match_id=m.id AND p.user_id=? AND p.group_id=?
-    LEFT JOIN bets b ON b.match_id=m.id AND b.user_id=? AND b.group_id=?
-    WHERE ${where.join(' AND ')} ORDER BY m.kickoff ${results ? 'DESC' : 'ASC'} LIMIT ${results ? 60 : 120}`)
-    .all(args[4], args[0], args[1], args[2], args[3], ...args.slice(5));
-  if (!rows.length) return [];
-  const pools = db.prepare(`SELECT match_id, pick, SUM(stake) AS total, COUNT(*) AS n FROM bets
-    WHERE group_id=? AND match_id IN (${rows.map(() => '?').join(',')}) GROUP BY match_id, pick`).all(gid, ...rows.map((r) => r.id));
+    WHERE ${where.join(' AND ')} ORDER BY m.kickoff ${results ? 'DESC' : 'ASC'} LIMIT ${results ? 60 : 120}`).all(...args);
   return rows.map((m) => ({
     id: m.id, comp_id: m.comp_id, comp: m.comp_name, kind: m.comp_kind, round: m.round, home: m.home, away: m.away,
     home_badge: m.home_badge, away_badge: m.away_badge, kickoff: m.kickoff, status: m.status,
     home_goals: m.home_goals, away_goals: m.away_goals, locked: isLocked(m), comments: m.n_comments,
-    pool: Object.fromEntries(['L', 'E', 'V'].map((k) => {
-      const r = pools.find((p) => p.match_id === m.id && p.pick === k);
-      return [k, { total: r?.total || 0, n: r?.n || 0 }];
-    })),
-    mine: {
-      prediction: m.p_home == null ? null : { home: m.p_home, away: m.p_away, points: m.p_points },
-      bet: m.b_pick ? { pick: m.b_pick, stake: m.b_stake, payout: m.b_payout } : null,
-    },
+    enrolled: !!m.enrolled, fee: m.entry_fee,
+    mine: { prediction: m.p_home == null ? null : { home: m.p_home, away: m.p_away, points: m.p_points } },
   }));
 }
 
+// Para pronosticar hay que estar anotado en la fecha (con fichas). Sin fichas no se juega nada.
 function play(user, gid, matchId, body) {
   member(user, gid);
+  if (body.bet !== undefined) throw bad('Ya no hay apuestas por partido: ahora se juega por fecha con pozo.');
   return tx(() => {
     const m = db.prepare('SELECT * FROM matches WHERE id=?').get(matchId);
     if (!m) throw new HttpError(404, 'Partido inexistente');
     if (isLocked(m)) throw new HttpError(409, 'El partido ya empezó: no se puede modificar');
-    if (body.prediction !== undefined) {
-      if (body.prediction === null) db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
-      else {
-        const { home, away } = body.prediction;
-        if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) throw bad('Resultado inválido');
-        db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, home, away) VALUES (?,?,?,?,?)
-          ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, gid, m.id, home, away);
-      }
+    if (body.prediction === null) {
+      db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
+      return { ok: true };
     }
-    if (body.bet) {
-      const kind = db.prepare('SELECT kind FROM competitions WHERE id=?').get(m.comp_id).kind;
-      if (kind === 'league') throw bad('En las ligas se juega por fecha: pronosticá los resultados y anotate al pozo de la fecha.');
-    }
-    if (body.bet !== undefined) {
-      const old = db.prepare('SELECT stake FROM bets WHERE user_id=? AND group_id=? AND match_id=?').get(user.id, gid, m.id);
-      if (old) {
-        db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(old.stake, user.id, gid);
-        db.prepare('DELETE FROM bets WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
-      }
-      if (body.bet !== null) {
-        const { pick, stake } = body.bet;
-        if (!['L', 'E', 'V'].includes(pick)) throw bad('Elegí local, empate o visitante');
-        if (!Number.isInteger(stake) || stake < MIN_STAKE) throw bad(`La apuesta mínima es ${MIN_STAKE} fichas`);
-        const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
-        if (stake > coins) throw bad('No te alcanzan las fichas');
-        db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(stake, user.id, gid);
-        db.prepare('INSERT INTO bets(user_id, group_id, match_id, pick, stake) VALUES (?,?,?,?,?)').run(user.id, gid, m.id, pick, stake);
-      }
-    }
-    return { coins: db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins };
+    if (!db.prepare('SELECT 1 FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').get(gid, m.comp_id, m.round, user.id))
+      throw new HttpError(403, 'Para pronosticar tenés que anotarte a la fecha con fichas.');
+    const { home, away } = body.prediction || {};
+    if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) throw bad('Resultado inválido');
+    db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, home, away) VALUES (?,?,?,?,?)
+      ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, gid, m.id, home, away);
+    return { ok: true };
   });
 }
 
@@ -209,9 +180,7 @@ function ranking(gid, comp, round) {
         WHERE p.user_id=u.id AND p.group_id=?1 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0) AS points,
       (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id=p.match_id
         WHERE p.user_id=u.id AND p.group_id=?1 AND p.points=3 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)) AS exact,
-      COALESCE((SELECT SUM(b.payout - b.stake) FROM bets b JOIN matches m ON m.id=b.match_id
-        WHERE b.user_id=u.id AND b.group_id=?1 AND b.payout IS NOT NULL AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0)
-      + COALESCE((SELECT SUM(re.payout - re.fee) FROM round_entries re WHERE re.user_id=u.id AND re.group_id=?1 AND re.payout IS NOT NULL
+      COALESCE((SELECT SUM(re.payout - re.fee) FROM round_entries re WHERE re.user_id=u.id AND re.group_id=?1 AND re.payout IS NOT NULL
         AND (?2 IS NULL OR re.comp_id=?2) AND (?3 IS NULL OR re.round=?3)), 0)
       + COALESCE((SELECT SUM(ce.payout - ce.fee) FROM champ_entries ce WHERE ce.user_id=u.id AND ce.group_id=?1 AND ce.payout IS NOT NULL
         AND (?2 IS NULL OR ce.comp_id=?2) AND ?3 IS NULL), 0) AS net
@@ -372,26 +341,27 @@ route('GET', '/api/groups/:gid/pots', ({ user, params }) => {
   const since = new Date(Date.now() - 21 * 864e5).toISOString(), until = new Date(Date.now() + 21 * 864e5).toISOString();
   const rounds = [], champs = [];
   for (const c of comps) {
-    if (c.kind === 'league' && c.entry_fee > 0) {
+    {
       const rs = db.prepare(`SELECT round, MIN(kickoff) AS first FROM matches WHERE comp_id=? AND round IS NOT NULL GROUP BY round
         HAVING first > ? AND first < ? ORDER BY first`).all(c.id, since, until);
       for (const r of rs) rounds.push(roundInfo(gid, user.id, c, r.round));
-    } else if (c.champ_fee > 0 && db.prepare('SELECT 1 FROM matches WHERE comp_id=?').get(c.id)) champs.push(champInfo(gid, user.id, c));
+    }
+    if (c.champ_fee > 0 && db.prepare('SELECT 1 FROM matches WHERE comp_id=?').get(c.id)) champs.push(champInfo(gid, user.id, c));
   }
   return { rounds, champs };
 });
 route('POST', '/api/groups/:gid/rounds/join', ({ user, params, body }) => {
   const gid = Number(params.gid); member(user, gid);
   return tx(() => {
-    const comp = db.prepare("SELECT * FROM competitions WHERE id=? AND enabled=1 AND kind='league'").get(Number(body.comp_id));
-    if (!comp || comp.entry_fee <= 0) throw bad('Ese torneo no tiene pozo por fecha');
+    const comp = db.prepare('SELECT * FROM competitions WHERE id=? AND enabled=1').get(Number(body.comp_id));
+    if (!comp) throw bad('Ese torneo no existe');
     const info = db.prepare('SELECT COUNT(*) AS n FROM matches WHERE comp_id=? AND round=?').get(comp.id, String(body.round));
     if (!info.n) throw bad('No existe esa fecha');
     const r = roundInfo(gid, user.id, comp, String(body.round));
     if (r.joined) throw bad('Ya estás anotado en esta fecha');
     if (!r.can_join) throw bad('La inscripción cerró: la fecha ya empezó');
     const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
-    if (coins < comp.entry_fee) throw bad(`Necesitás ${comp.entry_fee} fichas para anotarte. Pedile fichas al admin.`);
+    if (coins < comp.entry_fee) throw bad(`Necesitás ${comp.entry_fee} fichas para anotarte. Sin fichas no se puede jugar: pedíselas al admin.`);
     db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(comp.entry_fee, user.id, gid);
     db.prepare('INSERT INTO round_entries(group_id, comp_id, round, user_id, fee) VALUES (?,?,?,?,?)').run(gid, comp.id, String(body.round), user.id, comp.entry_fee);
     return { ok: true };
@@ -405,6 +375,7 @@ route('POST', '/api/groups/:gid/rounds/leave', ({ user, params, body }) => {
     if (!e) throw bad('No estabas anotado');
     if (!roundInfo(gid, user.id, comp, String(body.round)).can_join) throw bad('La fecha ya empezó: no se puede salir');
     db.prepare('DELETE FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').run(gid, comp.id, e.round, user.id);
+    db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id IN (SELECT id FROM matches WHERE comp_id=? AND round=?)').run(user.id, gid, comp.id, e.round);
     db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(e.fee, user.id, gid);
     return { ok: true };
   });
@@ -422,6 +393,27 @@ route('POST', '/api/groups/:gid/champs/:cid/join', ({ user, params }) => {
     db.prepare('INSERT INTO champ_entries(group_id, comp_id, user_id, fee, joined_at) VALUES (?,?,?,?,?)').run(gid, comp.id, user.id, comp.champ_fee, now());
     return { ok: true };
   });
+});
+// ---------- canje de fichas por premios (los define el admin) ----------
+route('GET', '/api/rewards', () => db.prepare('SELECT id, title, description, cost FROM rewards WHERE active=1 ORDER BY cost').all());
+route('GET', '/api/groups/:gid/redemptions', ({ user, params }) => {
+  member(user, params.gid);
+  return db.prepare('SELECT id, title, cost, status, created_at FROM redemptions WHERE user_id=? AND group_id=? ORDER BY id DESC LIMIT 10').all(user.id, Number(params.gid));
+});
+route('POST', '/api/groups/:gid/redeem', ({ user, params, body }) => {
+  const gid = Number(params.gid), g = member(user, gid);
+  const r = tx(() => {
+    const rw = db.prepare('SELECT * FROM rewards WHERE id=? AND active=1').get(Number(body.reward_id));
+    if (!rw) throw bad('Ese premio ya no está disponible');
+    const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
+    if (coins < rw.cost) throw bad(`Te faltan ${rw.cost - coins} fichas para canjear este premio`);
+    db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(rw.cost, user.id, gid);
+    db.prepare('INSERT INTO redemptions(user_id, group_id, reward_id, title, cost) VALUES (?,?,?,?,?)').run(user.id, gid, rw.id, rw.title, rw.cost);
+    return rw;
+  });
+  const a = adminId();
+  if (a) { enqueueForUser(a, 'Canje de fichas', `${user.nick} (${g.name}) canjeó "${r.title}" por ${r.cost} fichas.`); flush(); }
+  return { ok: true };
 });
 route('GET', '/api/groups/:gid/ranking', ({ user, params, url }) => {
   member(user, params.gid);
@@ -446,11 +438,8 @@ route('GET', '/api/matches/:id/plays', ({ user, params, url }) => {
   const m = db.prepare('SELECT * FROM matches WHERE id=?').get(Number(params.id));
   if (!m) throw new HttpError(404, 'Partido inexistente');
   if (!isLocked(m)) throw new HttpError(409, 'Las jugadas se ven cuando empieza el partido');
-  return db.prepare(`SELECT u.nick, u.avatar, u.color, p.home, p.away, p.points, b.pick, b.stake, b.payout
-    FROM memberships mb JOIN users u ON u.id=mb.user_id
-    LEFT JOIN predictions p ON p.user_id=u.id AND p.group_id=mb.group_id AND p.match_id=?1
-    LEFT JOIN bets b ON b.user_id=u.id AND b.group_id=mb.group_id AND b.match_id=?1
-    WHERE mb.group_id=?2 AND (p.user_id IS NOT NULL OR b.user_id IS NOT NULL) ORDER BY u.nick`).all(m.id, gid);
+  return db.prepare(`SELECT u.nick, u.avatar, u.color, p.home, p.away, p.points
+    FROM predictions p JOIN users u ON u.id=p.user_id WHERE p.group_id=? AND p.match_id=? ORDER BY u.nick`).all(gid, m.id);
 });
 route('GET', '/api/matches/:id/comments', ({ user, params, url }) => {
   const gid = Number(url.searchParams.get('group')); member(user, gid);
@@ -548,6 +537,42 @@ route('POST', '/api/admin/coin-requests/:id', ({ params, body }) => {
   flush();
   return { ok: true };
 }, { admin: true });
+route('GET', '/api/admin/rewards', () => db.prepare('SELECT * FROM rewards ORDER BY active DESC, cost').all(), { admin: true });
+const rewardFields = (b, cur = {}) => {
+  const title = String(b.title ?? cur.title ?? '').trim().slice(0, 80), cost = Number(b.cost ?? cur.cost);
+  if (title.length < 2) throw bad('Poné un nombre para el premio');
+  if (!Number.isInteger(cost) || cost < 1 || cost > 10_000_000) throw bad('El costo en fichas es inválido');
+  return { title, cost, description: String(b.description ?? cur.description ?? '').trim().slice(0, 300) || null };
+};
+route('POST', '/api/admin/rewards', ({ body }) => {
+  const r = rewardFields(body);
+  return { id: Number(db.prepare('INSERT INTO rewards(title, description, cost) VALUES (?,?,?)').run(r.title, r.description, r.cost).lastInsertRowid) };
+}, { admin: true });
+route('PATCH', '/api/admin/rewards/:id', ({ params, body }) => {
+  const cur = db.prepare('SELECT * FROM rewards WHERE id=?').get(Number(params.id));
+  if (!cur) throw new HttpError(404, 'Premio inexistente');
+  const r = rewardFields(body, cur);
+  db.prepare('UPDATE rewards SET title=?, description=?, cost=?, active=? WHERE id=?').run(r.title, r.description, r.cost, body.active === undefined ? cur.active : body.active ? 1 : 0, cur.id);
+  return { ok: true };
+}, { admin: true });
+route('GET', '/api/admin/redemptions', () => db.prepare(`SELECT r.id, r.title, r.cost, r.created_at, u.nick, u.email, g.name AS group_name
+  FROM redemptions r JOIN users u ON u.id=r.user_id JOIN groups g ON g.id=r.group_id WHERE r.status='pending' ORDER BY r.id`).all(), { admin: true });
+route('POST', '/api/admin/redemptions/:id', ({ params, body }) => {
+  const r = db.prepare("SELECT * FROM redemptions WHERE id=? AND status='pending'").get(Number(params.id));
+  if (!r) throw new HttpError(404, 'Ese canje ya fue resuelto');
+  if (body.action === 'deliver') {
+    db.prepare("UPDATE redemptions SET status='delivered', resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(r.id);
+    enqueueForUser(r.user_id, 'Premio entregado', `Tu canje de "${r.title}" fue marcado como entregado.`);
+  } else if (body.action === 'reject') {
+    tx(() => {
+      db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(r.cost, r.user_id, r.group_id); // se devuelven las fichas
+      db.prepare("UPDATE redemptions SET status='rejected', resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(r.id);
+    });
+    enqueueForUser(r.user_id, 'Canje rechazado', `Tu canje de "${r.title}" no se pudo hacer. Te devolvimos ${r.cost} fichas.`);
+  } else throw bad('Acción inválida');
+  flush();
+  return { ok: true };
+}, { admin: true });
 route('POST', '/api/admin/grant', ({ body }) => {
   const amount = Number(body.amount);
   if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000) throw bad('Monto inválido');
@@ -614,8 +639,10 @@ route('POST', '/api/admin/competitions', ({ body }) => {
 route('POST', '/api/admin/matches', ({ body }) => {
   const kickoff = new Date(body.kickoff);
   if (!body.comp_id || !body.home || !body.away || isNaN(kickoff)) throw bad('Faltan datos del partido');
+  const home = String(body.home).trim(), away = String(body.away).trim();
+  const round = String(body.round || '').trim() || `${home} vs ${away} · ${kickoff.toISOString().slice(0, 10)}`;
   const id = Number(db.prepare('INSERT INTO matches(comp_id, round, home, away, kickoff) VALUES (?,?,?,?,?)')
-    .run(Number(body.comp_id), body.round || null, String(body.home).trim(), String(body.away).trim(), kickoff.toISOString()).lastInsertRowid);
+    .run(Number(body.comp_id), round, home, away, kickoff.toISOString()).lastInsertRowid);
   return { id };
 }, { admin: true });
 route('POST', '/api/admin/matches/:id/result', async ({ params, body }) => {

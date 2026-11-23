@@ -7,6 +7,7 @@ import { kindFor, defaultFees } from './prizes.js';
 const log = (...a) => console.log(new Date().toISOString(), '[sync]', ...a);
 
 function upsertMatch(compId, m) {
+  m = { ...m, round: m.round || `${m.home} vs ${m.away} · ${m.kickoff.slice(0, 10)}` };
   const ex = db.prepare('SELECT id, settled FROM matches WHERE ext_id=?').get(m.ext_id);
   if (ex?.settled) return; // ya liquidado: no se toca
   tx(() => {
