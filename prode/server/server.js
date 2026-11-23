@@ -3,26 +3,33 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, tx, getSetting, setSetting } from './db.js';
+import { db, tx } from './db.js';
 import { START_COINS, MIN_STAKE } from './scoring.js';
 import { settleMatch } from './settle.js';
 import { discover, syncFixtures, refreshResults, startScheduler } from './sync.js';
 import { seedDemo } from './demo.js';
+import { validateAccount, validPassword, PASSWORD_MSG, validAvatar, MIN_AGE } from './validate.js';
+import { standingsFor } from './standings.js';
+import { publicKey, pull, flush, startNotifier } from './push.js';
 
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT) || 3000;
+const SESSION_DAYS = 90;
+const GROUP_COLORS = ['#f5c542', '#ff9f43', '#4cc9f0', '#ff7eb6', '#b6e63e', '#b79cff', '#ff6b6b', '#e8eef0'];
 
-// Código de invitación del grupo: solo quien lo tenga puede crear cuenta.
-if (process.env.PRODE_CODE) setSetting('invite', process.env.PRODE_CODE);
-else if (!getSetting('invite')) setSetting('invite', crypto.randomBytes(3).toString('hex'));
 if (process.env.PRODE_DEMO) seedDemo();
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 const bad = (m) => new HttpError(400, m);
 
-// ---------- usuarios ----------
-const hashPin = (pin, salt) => crypto.scryptSync(pin, salt, 32).toString('hex');
-const publicUser = (u) => ({ id: u.id, name: u.name, coins: u.coins, is_admin: !!u.is_admin });
+// ---------- cuentas ----------
+const hashPass = (pass, salt) => crypto.scryptSync(pass, salt, 32).toString('hex');
+const sameHash = (a, b) => crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+const publicUser = (u) => ({
+  id: u.id, email: u.email, first_name: u.first_name, last_name: u.last_name, nick: u.nick,
+  birth_date: u.birth_date, fav_team: u.fav_team, avatar: u.avatar, color: u.color, is_admin: !!u.is_admin,
+});
+const userById = (id) => db.prepare('SELECT * FROM users WHERE id=?').get(id);
 
 function newSession(userId) {
   const token = crypto.randomBytes(24).toString('hex');
@@ -30,43 +37,90 @@ function newSession(userId) {
   return token;
 }
 const attempts = new Map();
-function throttle(key) {
+function throttle(key, max = 10) {
   const now = Date.now(), a = (attempts.get(key) || []).filter((t) => now - t < 10 * 60e3);
-  if (a.length >= 10) throw new HttpError(429, 'Demasiados intentos, probá en unos minutos');
+  if (a.length >= max) throw new HttpError(429, 'Demasiados intentos, probá en unos minutos');
   a.push(now); attempts.set(key, a);
 }
 function authUser(req) {
   const t = (req.headers.authorization || '').replace(/^Bearer /, '');
-  const u = t && db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(t);
+  const u = t && db.prepare(`SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id
+    WHERE s.token=? AND s.created_at > datetime('now', ?)`).get(t, `-${SESSION_DAYS} days`);
   if (!u) throw new HttpError(401, 'Sesión vencida');
   return u;
 }
 
+// ---------- grupos ----------
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function newCode() {
+  for (;;) {
+    const c = Array.from(crypto.randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+    if (!db.prepare('SELECT 1 FROM groups WHERE code=?').get(c)) return c;
+  }
+}
+const cleanColor = (c) => (GROUP_COLORS.includes(c) ? c : GROUP_COLORS[0]);
+function createGroup(user, name, color) {
+  name = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+  if (name.length < 2) throw bad('Poné un nombre para el grupo');
+  return tx(() => {
+    const id = Number(db.prepare('INSERT INTO groups(name, code, color, owner_id) VALUES (?,?,?,?)')
+      .run(name, newCode(), cleanColor(color), user.id).lastInsertRowid);
+    db.prepare('INSERT INTO memberships(user_id, group_id, coins) VALUES (?,?,?)').run(user.id, id, START_COINS);
+    return id;
+  });
+}
+function joinGroup(user, code) {
+  const g = db.prepare('SELECT * FROM groups WHERE code=?').get(String(code || '').trim());
+  if (!g) throw bad('No existe un grupo con ese código');
+  db.prepare('INSERT OR IGNORE INTO memberships(user_id, group_id, coins) VALUES (?,?,?)').run(user.id, g.id, START_COINS);
+  return g.id;
+}
+function member(user, gid) {
+  const row = db.prepare(`SELECT mb.coins, g.* FROM memberships mb JOIN groups g ON g.id=mb.group_id
+    WHERE mb.user_id=? AND mb.group_id=?`).get(user.id, Number(gid));
+  if (!row) throw new HttpError(403, 'No sos parte de ese grupo');
+  return row;
+}
+function owner(user, gid) {
+  const g = member(user, gid);
+  if (g.owner_id !== user.id) throw new HttpError(403, 'Solo el creador del grupo puede hacer esto');
+  return g;
+}
+function myGroups(user) {
+  return db.prepare(`SELECT g.id, g.name, g.color, g.code, mb.coins, (g.owner_id=?1) AS is_owner,
+      (SELECT COUNT(*) FROM memberships WHERE group_id=g.id) AS members
+    FROM memberships mb JOIN groups g ON g.id=mb.group_id WHERE mb.user_id=?1 ORDER BY mb.joined_at`)
+    .all(user.id).map((g) => ({ ...g, is_owner: !!g.is_owner }));
+}
+const meBundle = (u) => ({ user: publicUser(u), groups: myGroups(u) });
+
 // ---------- partidos ----------
 const isLocked = (m) => m.status !== 'scheduled' || new Date(m.kickoff) <= new Date();
 
-function listMatches(user, q) {
+function listMatches(user, gid, q) {
+  member(user, gid);
   const results = q.get('scope') === 'results';
   const where = ['c.enabled=1'];
-  const args = [user.id, user.id];
+  const args = [user.id, gid, user.id, gid, gid];
   if (q.get('comp')) { where.push('m.comp_id=?'); args.push(Number(q.get('comp'))); }
   where.push(results ? "m.status IN ('finished','cancelled')" : "m.status NOT IN ('finished','cancelled')");
-  // próximos: incluye los de las últimas 4 h (en juego) y descarta restos viejos sin resultado
   if (!results) { where.push('m.kickoff > ?'); args.push(new Date(Date.now() - 4 * 3600e3).toISOString()); }
   const rows = db.prepare(`SELECT m.*, c.name AS comp_name,
       p.home AS p_home, p.away AS p_away, p.points AS p_points,
-      b.pick AS b_pick, b.stake AS b_stake, b.payout AS b_payout
+      b.pick AS b_pick, b.stake AS b_stake, b.payout AS b_payout,
+      (SELECT COUNT(*) FROM comments WHERE match_id=m.id AND group_id=?) AS n_comments
     FROM matches m JOIN competitions c ON c.id=m.comp_id
-    LEFT JOIN predictions p ON p.match_id=m.id AND p.user_id=?
-    LEFT JOIN bets b ON b.match_id=m.id AND b.user_id=?
-    WHERE ${where.join(' AND ')} ORDER BY m.kickoff ${results ? 'DESC' : 'ASC'} LIMIT ${results ? 60 : 120}`).all(...args);
+    LEFT JOIN predictions p ON p.match_id=m.id AND p.user_id=? AND p.group_id=?
+    LEFT JOIN bets b ON b.match_id=m.id AND b.user_id=? AND b.group_id=?
+    WHERE ${where.join(' AND ')} ORDER BY m.kickoff ${results ? 'DESC' : 'ASC'} LIMIT ${results ? 60 : 120}`)
+    .all(args[4], args[0], args[1], args[2], args[3], ...args.slice(5));
   if (!rows.length) return [];
   const pools = db.prepare(`SELECT match_id, pick, SUM(stake) AS total, COUNT(*) AS n FROM bets
-    WHERE match_id IN (${rows.map(() => '?').join(',')}) GROUP BY match_id, pick`).all(...rows.map((r) => r.id));
+    WHERE group_id=? AND match_id IN (${rows.map(() => '?').join(',')}) GROUP BY match_id, pick`).all(gid, ...rows.map((r) => r.id));
   return rows.map((m) => ({
     id: m.id, comp_id: m.comp_id, comp: m.comp_name, round: m.round, home: m.home, away: m.away,
     home_badge: m.home_badge, away_badge: m.away_badge, kickoff: m.kickoff, status: m.status,
-    home_goals: m.home_goals, away_goals: m.away_goals, locked: isLocked(m),
+    home_goals: m.home_goals, away_goals: m.away_goals, locked: isLocked(m), comments: m.n_comments,
     pool: Object.fromEntries(['L', 'E', 'V'].map((k) => {
       const r = pools.find((p) => p.match_id === m.id && p.pick === k);
       return [k, { total: r?.total || 0, n: r?.n || 0 }];
@@ -78,145 +132,272 @@ function listMatches(user, q) {
   }));
 }
 
-function play(user, matchId, body) {
+function play(user, gid, matchId, body) {
+  member(user, gid);
   return tx(() => {
     const m = db.prepare('SELECT * FROM matches WHERE id=?').get(matchId);
     if (!m) throw new HttpError(404, 'Partido inexistente');
     if (isLocked(m)) throw new HttpError(409, 'El partido ya empezó: no se puede modificar');
     if (body.prediction !== undefined) {
-      if (body.prediction === null) db.prepare('DELETE FROM predictions WHERE user_id=? AND match_id=?').run(user.id, m.id);
+      if (body.prediction === null) db.prepare('DELETE FROM predictions WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
       else {
         const { home, away } = body.prediction;
         if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) throw bad('Resultado inválido');
-        db.prepare(`INSERT INTO predictions(user_id, match_id, home, away) VALUES (?,?,?,?)
-          ON CONFLICT(user_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, m.id, home, away);
+        db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, home, away) VALUES (?,?,?,?,?)
+          ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, gid, m.id, home, away);
       }
     }
     if (body.bet !== undefined) {
-      const old = db.prepare('SELECT stake FROM bets WHERE user_id=? AND match_id=?').get(user.id, m.id);
+      const old = db.prepare('SELECT stake FROM bets WHERE user_id=? AND group_id=? AND match_id=?').get(user.id, gid, m.id);
       if (old) {
-        db.prepare('UPDATE users SET coins=coins+? WHERE id=?').run(old.stake, user.id);
-        db.prepare('DELETE FROM bets WHERE user_id=? AND match_id=?').run(user.id, m.id);
+        db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(old.stake, user.id, gid);
+        db.prepare('DELETE FROM bets WHERE user_id=? AND group_id=? AND match_id=?').run(user.id, gid, m.id);
       }
       if (body.bet !== null) {
         const { pick, stake } = body.bet;
         if (!['L', 'E', 'V'].includes(pick)) throw bad('Elegí local, empate o visitante');
         if (!Number.isInteger(stake) || stake < MIN_STAKE) throw bad(`La apuesta mínima es ${MIN_STAKE} fichas`);
-        const coins = db.prepare('SELECT coins FROM users WHERE id=?').get(user.id).coins;
+        const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
         if (stake > coins) throw bad('No te alcanzan las fichas');
-        db.prepare('UPDATE users SET coins=coins-? WHERE id=?').run(stake, user.id);
-        db.prepare('INSERT INTO bets(user_id, match_id, pick, stake) VALUES (?,?,?,?)').run(user.id, m.id, pick, stake);
+        db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(stake, user.id, gid);
+        db.prepare('INSERT INTO bets(user_id, group_id, match_id, pick, stake) VALUES (?,?,?,?,?)').run(user.id, gid, m.id, pick, stake);
       }
     }
-    return publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
+    return { coins: db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins };
   });
 }
 
-function ranking() {
-  return db.prepare(`SELECT u.id, u.name, u.coins,
-      COALESCE((SELECT SUM(points) FROM predictions WHERE user_id=u.id), 0) AS points,
-      (SELECT COUNT(*) FROM predictions WHERE user_id=u.id AND points=3) AS exact,
-      (SELECT COUNT(*) FROM bets WHERE user_id=u.id AND payout IS NOT NULL AND payout>stake) AS bets_won,
-      (SELECT COUNT(*) FROM bets WHERE user_id=u.id AND payout IS NOT NULL) AS bets_done
-    FROM users u ORDER BY u.coins DESC, points DESC, u.name`).all();
+/** Ranking del grupo. Con comp/round filtra por torneo y fecha: puntos y resultado neto de fichas. */
+function ranking(gid, comp, round) {
+  const players = db.prepare(`SELECT u.id, u.nick, u.avatar, u.color, u.fav_team, mb.coins,
+      COALESCE((SELECT SUM(p.points) FROM predictions p JOIN matches m ON m.id=p.match_id
+        WHERE p.user_id=u.id AND p.group_id=?1 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0) AS points,
+      (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id=p.match_id
+        WHERE p.user_id=u.id AND p.group_id=?1 AND p.points=3 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)) AS exact,
+      COALESCE((SELECT SUM(b.payout - b.stake) FROM bets b JOIN matches m ON m.id=b.match_id
+        WHERE b.user_id=u.id AND b.group_id=?1 AND b.payout IS NOT NULL AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0) AS net
+    FROM memberships mb JOIN users u ON u.id=mb.user_id WHERE mb.group_id=?1`).all(gid, comp, round);
+  return players;
 }
 
 // ---------- rutas ----------
 const routes = [];
-const route = (method, path, fn, admin = false, open = false) =>
-  routes.push({ method, re: new RegExp(`^${path.replace(/:(\w+)/g, '(?<$1>[^/]+)')}$`), fn, admin, open });
+const route = (method, path, fn, opts = {}) =>
+  routes.push({ method, re: new RegExp(`^${path.replace(/:(\w+)/g, '(?<$1>[^/]+)')}$`), fn, ...opts });
 
-route('POST', '/api/register', async ({ body, ip }) => {
-  throttle('reg:' + ip);
-  const name = String(body.name || '').trim(), pin = String(body.pin || '');
-  if (name.length < 2 || name.length > 20) throw bad('El nombre debe tener entre 2 y 20 letras');
-  if (!/^\d{4,8}$/.test(pin)) throw bad('El PIN debe tener entre 4 y 8 números');
-  if (String(body.code || '').trim().toLowerCase() !== getSetting('invite').toLowerCase()) throw bad('Código de grupo incorrecto');
-  if (db.prepare('SELECT 1 FROM users WHERE name=?').get(name)) throw bad('Ese nombre ya está en uso');
+route('GET', '/api/config', () => ({ min_age: MIN_AGE, colors: GROUP_COLORS, start_coins: START_COINS }), { open: true });
+
+route('POST', '/api/register', ({ body, ip }) => {
+  throttle('reg:' + ip, 20);
+  const v = validateAccount(body);
+  if (v.error) throw bad(v.error);
+  if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
+  if (body.accept !== true) throw bad(`Tenés que confirmar que tenés ${MIN_AGE} años o más y aceptar las reglas`);
+  if (db.prepare('SELECT 1 FROM users WHERE email=?').get(v.value.email)) throw bad('Ya hay una cuenta con ese mail');
+  if (db.prepare('SELECT 1 FROM users WHERE nick=?').get(v.value.nick)) throw bad('Ese apodo ya está en uso, elegí otro');
+  const code = String(body.code || '').trim();
+  if (code && !db.prepare('SELECT 1 FROM groups WHERE code=?').get(code)) throw bad('No existe un grupo con ese código');
   const first = !db.prepare('SELECT 1 FROM users LIMIT 1').get();
+  const salt = crypto.randomBytes(8).toString('hex'), u = v.value;
+  const id = Number(db.prepare(`INSERT INTO users(email, salt, pass_hash, first_name, last_name, nick, birth_date, fav_team, color, is_admin)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(u.email, salt, hashPass(body.password, salt), u.first_name, u.last_name, u.nick,
+    u.birth_date, u.fav_team, GROUP_COLORS[id_mod(u.nick)], first ? 1 : 0).lastInsertRowid);
+  const user = userById(id);
+  if (code) joinGroup(user, code);
+  return { token: newSession(id), ...meBundle(user) };
+}, { open: true });
+const id_mod = (s) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % GROUP_COLORS.length;
+
+route('POST', '/api/login', ({ body }) => {
+  const email = String(body.email || '').trim().toLowerCase();
+  throttle('login:' + email);
+  const u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+  const ok = u && sameHash(hashPass(String(body.password || ''), u.salt), u.pass_hash);
+  if (!ok) throw new HttpError(401, 'Mail o contraseña incorrectos');
+  return { token: newSession(u.id), ...meBundle(u) };
+}, { open: true });
+
+route('POST', '/api/logout', ({ req }) => {
+  db.prepare('DELETE FROM sessions WHERE token=?').run((req.headers.authorization || '').replace(/^Bearer /, ''));
+  return { ok: true };
+});
+route('GET', '/api/me', ({ user }) => meBundle(user));
+route('PATCH', '/api/me', ({ user, body }) => {
+  const v = validateAccount({ ...userById(user.id), ...body });
+  if (v.error) throw bad(v.error);
+  if (db.prepare('SELECT 1 FROM users WHERE nick=? AND id<>?').get(v.value.nick, user.id)) throw bad('Ese apodo ya está en uso, elegí otro');
+  if (db.prepare('SELECT 1 FROM users WHERE email=? AND id<>?').get(v.value.email, user.id)) throw bad('Ya hay una cuenta con ese mail');
+  const cur = userById(user.id);
+  let avatar = cur.avatar;
+  if (body.avatar !== undefined) { if (!validAvatar(body.avatar)) throw bad('La foto no es válida o es muy pesada'); avatar = body.avatar || null; }
+  const color = GROUP_COLORS.includes(body.color) ? body.color : cur.color;
+  const x = v.value;
+  db.prepare(`UPDATE users SET email=?, first_name=?, last_name=?, nick=?, birth_date=?, fav_team=?, avatar=?, color=? WHERE id=?`)
+    .run(x.email, x.first_name, x.last_name, x.nick, x.birth_date, x.fav_team, avatar, color, user.id);
+  return meBundle(userById(user.id));
+});
+route('POST', '/api/me/password', ({ user, body }) => {
+  if (!sameHash(hashPass(String(body.current || ''), user.salt), user.pass_hash)) throw bad('La contraseña actual no es correcta');
+  if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
   const salt = crypto.randomBytes(8).toString('hex');
-  const id = Number(db.prepare('INSERT INTO users(name, salt, pin_hash, is_admin, coins) VALUES (?,?,?,?,?)')
-    .run(name, salt, hashPin(pin, salt), first ? 1 : 0, START_COINS).lastInsertRowid);
-  return { token: newSession(id), user: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(id)) };
-}, false, true);
+  db.prepare('UPDATE users SET salt=?, pass_hash=? WHERE id=?').run(salt, hashPass(body.password, salt), user.id);
+  return { ok: true };
+});
 
-route('POST', '/api/login', async ({ body }) => {
-  const name = String(body.name || '').trim();
-  throttle('login:' + name.toLowerCase());
-  const u = db.prepare('SELECT * FROM users WHERE name=?').get(name);
-  const ok = u && crypto.timingSafeEqual(Buffer.from(hashPin(String(body.pin || ''), u.salt), 'hex'), Buffer.from(u.pin_hash, 'hex'));
-  if (!ok) throw new HttpError(401, 'Nombre o PIN incorrectos');
-  return { token: newSession(u.id), user: publicUser(u) };
-}, false, true);
+// grupos
+route('POST', '/api/groups', ({ user, body }) => ({ id: createGroup(user, body.name, body.color), ...meBundle(user) }));
+route('POST', '/api/groups/join', ({ user, body }) => { const id = joinGroup(user, body.code); return { id, ...meBundle(user) }; });
+route('PATCH', '/api/groups/:gid', ({ user, params, body }) => {
+  const g = owner(user, params.gid);
+  const name = String(body.name ?? g.name).trim().replace(/\s+/g, ' ').slice(0, 30);
+  if (name.length < 2) throw bad('Poné un nombre para el grupo');
+  db.prepare('UPDATE groups SET name=?, color=? WHERE id=?').run(name, cleanColor(body.color ?? g.color), g.id);
+  return meBundle(user);
+});
+route('POST', '/api/groups/:gid/code', ({ user, params }) => {
+  const g = owner(user, params.gid);
+  db.prepare('UPDATE groups SET code=? WHERE id=?').run(newCode(), g.id);
+  return meBundle(user);
+});
+route('POST', '/api/groups/:gid/leave', ({ user, params }) => {
+  const g = member(user, params.gid);
+  if (g.owner_id === user.id) throw bad('Sos el creador del grupo, no podés salir. Pasale la posta a alguien o dejalo.');
+  db.prepare('DELETE FROM memberships WHERE user_id=? AND group_id=?').run(user.id, g.id);
+  return meBundle(user);
+});
+route('GET', '/api/groups/:gid/members', ({ user, params }) => {
+  member(user, params.gid);
+  return db.prepare(`SELECT u.id, u.nick, u.avatar, u.color, u.fav_team, mb.coins, (g.owner_id=u.id) AS is_owner
+    FROM memberships mb JOIN users u ON u.id=mb.user_id JOIN groups g ON g.id=mb.group_id
+    WHERE mb.group_id=? ORDER BY u.nick`).all(Number(params.gid)).map((m) => ({ ...m, is_owner: !!m.is_owner }));
+});
+route('POST', '/api/groups/:gid/members/:uid/coins', ({ user, params, body }) => {
+  owner(user, params.gid);
+  const delta = Number(body.delta);
+  if (!Number.isInteger(delta)) throw bad('Monto inválido');
+  db.prepare('UPDATE memberships SET coins=MAX(0, coins+?) WHERE user_id=? AND group_id=?').run(delta, Number(params.uid), Number(params.gid));
+  return { ok: true };
+});
+route('POST', '/api/groups/:gid/members/:uid/password', ({ user, params, body }) => {
+  // Reemplaza al "olvidé mi contraseña" por mail: el creador del grupo da una clave temporal.
+  owner(user, params.gid);
+  if (!member({ id: Number(params.uid) }, params.gid)) throw bad('No es parte del grupo');
+  if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
+  const salt = crypto.randomBytes(8).toString('hex');
+  db.prepare('UPDATE users SET salt=?, pass_hash=? WHERE id=?').run(salt, hashPass(body.password, salt), Number(params.uid));
+  db.prepare('DELETE FROM sessions WHERE user_id=?').run(Number(params.uid));
+  return { ok: true };
+});
+route('GET', '/api/groups/:gid/ranking', ({ user, params, url }) => {
+  member(user, params.gid);
+  const comp = url.searchParams.get('comp') ? Number(url.searchParams.get('comp')) : null;
+  const round = url.searchParams.get('round') || null;
+  return { filtered: !!(comp || round), players: ranking(Number(params.gid), comp, round) };
+});
 
-route('GET', '/api/me', ({ user }) => publicUser(user));
-route('GET', '/api/competitions', () => db.prepare(`SELECT c.id, c.name, c.country FROM competitions c
-  WHERE c.enabled=1 AND EXISTS (SELECT 1 FROM matches WHERE comp_id=c.id) ORDER BY c.country DESC, c.name`).all());
-route('GET', '/api/matches', ({ user, url }) => listMatches(user, url.searchParams));
-route('PUT', '/api/matches/:id/play', ({ user, params, body }) => play(user, Number(params.id), body));
-route('GET', '/api/matches/:id/plays', ({ params }) => {
+// torneos, partidos y juego
+route('GET', '/api/competitions', () => {
+  const comps = db.prepare(`SELECT c.id, c.name, c.country FROM competitions c
+    WHERE c.enabled=1 AND EXISTS (SELECT 1 FROM matches WHERE comp_id=c.id) ORDER BY c.country DESC, c.name`).all();
+  const rounds = db.prepare(`SELECT comp_id, round, MIN(kickoff) AS first FROM matches WHERE round IS NOT NULL
+    GROUP BY comp_id, round ORDER BY first`).all();
+  return comps.map((c) => ({ ...c, rounds: rounds.filter((r) => r.comp_id === c.id).map((r) => r.round) }));
+});
+route('GET', '/api/competitions/:id/standings', ({ params }) => standingsFor(Number(params.id)) || (() => { throw new HttpError(404, 'Torneo inexistente'); })());
+route('GET', '/api/matches', ({ user, url }) => listMatches(user, Number(url.searchParams.get('group')), url.searchParams));
+route('PUT', '/api/matches/:id/play', ({ user, params, body, url }) => play(user, Number(url.searchParams.get('group')), Number(params.id), body));
+route('GET', '/api/matches/:id/plays', ({ user, params, url }) => {
+  const gid = Number(url.searchParams.get('group')); member(user, gid);
   const m = db.prepare('SELECT * FROM matches WHERE id=?').get(Number(params.id));
   if (!m) throw new HttpError(404, 'Partido inexistente');
   if (!isLocked(m)) throw new HttpError(409, 'Las jugadas se ven cuando empieza el partido');
-  return db.prepare(`SELECT u.name, p.home, p.away, p.points, b.pick, b.stake, b.payout FROM users u
-    LEFT JOIN predictions p ON p.user_id=u.id AND p.match_id=?1
-    LEFT JOIN bets b ON b.user_id=u.id AND b.match_id=?1
-    WHERE p.user_id IS NOT NULL OR b.user_id IS NOT NULL ORDER BY u.name`).all(m.id);
+  return db.prepare(`SELECT u.nick, u.avatar, u.color, p.home, p.away, p.points, b.pick, b.stake, b.payout
+    FROM memberships mb JOIN users u ON u.id=mb.user_id
+    LEFT JOIN predictions p ON p.user_id=u.id AND p.group_id=mb.group_id AND p.match_id=?1
+    LEFT JOIN bets b ON b.user_id=u.id AND b.group_id=mb.group_id AND b.match_id=?1
+    WHERE mb.group_id=?2 AND (p.user_id IS NOT NULL OR b.user_id IS NOT NULL) ORDER BY u.nick`).all(m.id, gid);
 });
-route('GET', '/api/ranking', () => ({ start: START_COINS, players: ranking() }));
+route('GET', '/api/matches/:id/comments', ({ user, params, url }) => {
+  const gid = Number(url.searchParams.get('group')); member(user, gid);
+  return db.prepare(`SELECT c.id, c.body, c.created_at, u.id AS user_id, u.nick, u.avatar, u.color FROM comments c
+    JOIN users u ON u.id=c.user_id WHERE c.group_id=? AND c.match_id=? ORDER BY c.id DESC LIMIT 100`)
+    .all(gid, Number(params.id)).reverse();
+});
+route('POST', '/api/matches/:id/comments', ({ user, params, body, url }) => {
+  const gid = Number(url.searchParams.get('group')); member(user, gid);
+  throttle(`cm:${user.id}`, 30);
+  const text = String(body.body || '').trim().slice(0, 280);
+  if (!text) throw bad('Escribí un comentario');
+  if (!db.prepare('SELECT 1 FROM matches WHERE id=?').get(Number(params.id))) throw new HttpError(404, 'Partido inexistente');
+  db.prepare('INSERT INTO comments(group_id, match_id, user_id, body) VALUES (?,?,?,?)').run(gid, Number(params.id), user.id, text);
+  return { ok: true };
+});
+route('DELETE', '/api/comments/:id', ({ user, params }) => {
+  const c = db.prepare('SELECT * FROM comments WHERE id=?').get(Number(params.id));
+  if (!c) throw new HttpError(404, 'No existe');
+  const g = db.prepare('SELECT owner_id FROM groups WHERE id=?').get(c.group_id);
+  if (c.user_id !== user.id && g.owner_id !== user.id) throw new HttpError(403, 'No podés borrar este comentario');
+  db.prepare('DELETE FROM comments WHERE id=?').run(c.id);
+  return { ok: true };
+});
 
-// admin
+// avisos
+route('GET', '/api/push/key', () => ({ key: publicKey() }), { open: true });
+route('POST', '/api/push/subscribe', ({ user, body }) => {
+  const ep = String(body.endpoint || '');
+  if (!/^https:\/\//.test(ep) || ep.length > 1000) throw bad('Suscripción inválida');
+  db.prepare(`INSERT INTO push_subs(user_id, endpoint) VALUES (?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id`).run(user.id, ep);
+  return { ok: true };
+});
+route('POST', '/api/push/unsubscribe', ({ user, body }) => {
+  db.prepare('DELETE FROM push_subs WHERE user_id=? AND endpoint=?').run(user.id, String(body.endpoint || ''));
+  return { ok: true };
+});
+// lo llama el service worker del celular cuando llega un aviso
+route('POST', '/api/push/pull', ({ body }) => ({ messages: pull(String(body.endpoint || '')) }), { open: true });
+
+// administración general (primer usuario registrado)
 route('GET', '/api/admin/overview', () => ({
-  invite: getSetting('invite'),
   competitions: db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM matches WHERE comp_id=c.id) AS matches
-    FROM competitions c ORDER BY c.enabled DESC, c.country DESC, c.name`).all(),
-  users: db.prepare('SELECT id, name, coins, is_admin FROM users ORDER BY name').all(),
-}), true);
+    FROM competitions c ORDER BY c.enabled DESC, c.country DESC, c.name`).all().map(({ standings_json, ...c }) => c),
+  users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
+}), { admin: true });
 route('POST', '/api/admin/sync', async () => {
   const found = await discover();
   const report = await syncFixtures();
   const checked = await refreshResults();
   return { found, report, checked };
-}, true);
+}, { admin: true });
 route('PATCH', '/api/admin/competitions/:id', ({ params, body }) => {
   db.prepare('UPDATE competitions SET enabled=? WHERE id=?').run(body.enabled ? 1 : 0, Number(params.id));
   return { ok: true };
-}, true);
+}, { admin: true });
 route('POST', '/api/admin/competitions', ({ body }) => {
   const name = String(body.name || '').trim();
   if (!name) throw bad('Falta el nombre');
   return { id: Number(db.prepare('INSERT INTO competitions(name, country, enabled) VALUES (?,?,1)').run(name, 'Manual').lastInsertRowid) };
-}, true);
+}, { admin: true });
 route('POST', '/api/admin/matches', ({ body }) => {
   const kickoff = new Date(body.kickoff);
   if (!body.comp_id || !body.home || !body.away || isNaN(kickoff)) throw bad('Faltan datos del partido');
   const id = Number(db.prepare('INSERT INTO matches(comp_id, round, home, away, kickoff) VALUES (?,?,?,?,?)')
     .run(Number(body.comp_id), body.round || null, String(body.home).trim(), String(body.away).trim(), kickoff.toISOString()).lastInsertRowid);
   return { id };
-}, true);
-route('POST', '/api/admin/matches/:id/result', ({ params, body }) => tx(() => {
+}, { admin: true });
+route('POST', '/api/admin/matches/:id/result', async ({ params, body }) => {
   const id = Number(params.id);
-  if (body.cancel) db.prepare("UPDATE matches SET status='cancelled' WHERE id=? AND settled=0").run(id);
-  else {
-    const { home, away } = body;
-    if (![home, away].every((n) => Number.isInteger(n) && n >= 0)) throw bad('Resultado inválido');
-    db.prepare("UPDATE matches SET status='finished', home_goals=?, away_goals=? WHERE id=? AND settled=0").run(home, away, id);
-  }
-  return { settled: settleMatch(id) };
-}), true);
-route('POST', '/api/admin/users/:id/coins', ({ params, body }) => {
-  const delta = Number(body.delta);
-  if (!Number.isInteger(delta)) throw bad('Monto inválido');
-  db.prepare('UPDATE users SET coins=MAX(0, coins+?) WHERE id=?').run(delta, Number(params.id));
-  return { ok: true };
-}, true);
-route('POST', '/api/admin/users/:id/pin', ({ params, body }) => {
-  if (!/^\d{4,8}$/.test(String(body.pin || ''))) throw bad('El PIN debe tener entre 4 y 8 números');
-  const salt = crypto.randomBytes(8).toString('hex');
-  db.prepare('UPDATE users SET salt=?, pin_hash=? WHERE id=?').run(salt, hashPin(String(body.pin), salt), Number(params.id));
-  db.prepare('DELETE FROM sessions WHERE user_id=?').run(Number(params.id));
-  return { ok: true };
-}, true);
+  const settled = tx(() => {
+    if (body.cancel) db.prepare("UPDATE matches SET status='cancelled' WHERE id=? AND settled=0").run(id);
+    else {
+      const { home, away } = body;
+      if (![home, away].every((n) => Number.isInteger(n) && n >= 0)) throw bad('Resultado inválido');
+      db.prepare("UPDATE matches SET status='finished', home_goals=?, away_goals=? WHERE id=? AND settled=0").run(home, away, id);
+    }
+    return settleMatch(id);
+  });
+  flush();
+  return { settled };
+}, { admin: true });
 
 // ---------- servidor ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -231,13 +412,14 @@ async function serveStatic(url, res) {
   res.writeHead(200, {
     'Content-Type': MIME[extname(file)] || 'application/octet-stream',
     'Cache-Control': /sw\.js$|\.html$/.test(file) ? 'no-cache' : 'public, max-age=3600',
+    'X-Content-Type-Options': 'nosniff',
   });
   res.end(data);
 }
 
 async function readBody(req) {
   let size = 0; const chunks = [];
-  for await (const c of req) { size += c.length; if (size > 100_000) throw bad('Pedido demasiado grande'); chunks.push(c); }
+  for await (const c of req) { size += c.length; if (size > 150_000) throw bad('Pedido demasiado grande'); chunks.push(c); }
   if (!chunks.length) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw bad('JSON inválido'); }
 }
@@ -257,7 +439,7 @@ const server = http.createServer(async (req, res) => {
       if (r.admin && !user.is_admin) throw new HttpError(403, 'Solo para el administrador');
       const body = req.method === 'GET' ? {} : await readBody(req);
       const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-      return send(200, await r.fn({ user, params: mt.groups || {}, body, url, ip }));
+      return send(200, await r.fn({ req, user, params: mt.groups || {}, body, url, ip }));
     }
     throw new HttpError(404, 'No existe');
   } catch (e) {
@@ -269,8 +451,8 @@ const server = http.createServer(async (req, res) => {
 if (process.env.PRODE_NO_LISTEN !== '1') {
   server.listen(PORT, () => {
     console.log(`PRODE listo en http://localhost:${PORT}`);
-    console.log(`Código de invitación del grupo: ${getSetting('invite')}`);
-    console.log('El primer usuario que se registre queda como administrador.');
+    console.log('El primer usuario que se registre queda como administrador (maneja torneos y fixture).');
+    startNotifier();
     if (!process.env.PRODE_DEMO && process.env.PRODE_SYNC !== '0') startScheduler();
   });
 }

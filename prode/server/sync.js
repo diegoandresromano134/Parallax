@@ -1,5 +1,6 @@
 import { db, tx } from './db.js';
 import { settleMatch } from './settle.js';
+import { flush } from './push.js';
 import * as provider from './providers/thesportsdb.js';
 
 const log = (...a) => console.log(new Date().toISOString(), '[sync]', ...a);
@@ -44,6 +45,10 @@ export async function syncFixtures() {
       const { season, matches } = await provider.fixtures(c);
       for (const m of matches) upsertMatch(c.id, m);
       db.prepare("UPDATE competitions SET season=?, synced_at=datetime('now') WHERE id=?").run(season, c.id);
+      try {
+        const rows = await provider.table({ ...c, season });
+        if (rows.length) db.prepare('UPDATE competitions SET standings_json=? WHERE id=?').run(JSON.stringify(rows), c.id);
+      } catch { /* la tabla es opcional: si falla se calcula con los resultados */ }
       report.push({ name: c.name, matches: matches.length });
     } catch (e) {
       log(`error en ${c.name}: ${e.message}`);
@@ -51,6 +56,7 @@ export async function syncFixtures() {
     }
   }
   log('fixtures', JSON.stringify(report));
+  await flush();
   return report;
 }
 
@@ -64,6 +70,7 @@ export async function refreshResults() {
     try { const m = await provider.lookup(p.ext_id); if (m) upsertMatch(p.comp_id, m); }
     catch (e) { log(`no se pudo actualizar ${p.ext_id}: ${e.message}`); }
   }
+  await flush();
   return pending.length;
 }
 

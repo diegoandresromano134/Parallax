@@ -71,3 +71,34 @@ label { display: block; font-size: .85rem; color: var(--mute); margin: 12px 0 4p
 .help { font-size: .82rem; color: var(--mute); }
 #toast { position: fixed; left: 50%; bottom: calc(80px + var(--bot)); transform: translate(-50%, 20px); background: #000d; color: #fff; padding: 10px 16px; border-radius: 99px; opacity: 0; transition: .25s; pointer-events: none; z-index: 20; max-width: 90%; text-align: center; white-space: nowrap; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); } #toast.error { background: #a02323; }
+
+/* ---- cuentas, grupos, comentarios ---- */
+.av { display: inline-grid; place-items: center; border-radius: 50%; object-fit: cover; flex: none; font-weight: 700; color: #11180f; vertical-align: middle; }
+.who { display: inline-flex; align-items: center; gap: 8px; min-width: 0; } .who small { display: block; color: var(--mute); font-size: .72rem; font-weight: 400; }
+.who.big { gap: 14px; font-size: 1.1rem; } .who.big small { font-size: .8rem; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.inline { display: grid; gap: 8px; } .inline.two { grid-template-columns: 1fr 1fr; align-items: center; }
+.field { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: #000a; }
+select.field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--mute) 50%), linear-gradient(135deg, var(--mute) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+.check { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: .88rem; margin-top: 16px; }
+.check input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); margin-top: 1px; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.swatches label { margin: 0; cursor: pointer; } .swatches input { position: absolute; opacity: 0; }
+.swatches i { display: block; width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; box-shadow: 0 0 0 1px #0008; }
+.swatches input:checked + i { border-color: #fff; } .swatches input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+.block { width: 100%; display: block; margin-top: 12px; } .nomargin { margin-top: 0; } .center { text-align: center; }
+.gsel { min-width: 0; } .gsel h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsel select { background: #000a; border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font-weight: 700; max-width: 62vw; }
+.foot { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.foot .ghost { font-size: .8rem; padding: 6px 10px; }
+.thread { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 8px; }
+.msg { display: flex; gap: 8px; font-size: .88rem; } .msg small { color: var(--mute); } .msg > div { min-width: 0; overflow-wrap: anywhere; }
+.msgform { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.x { background: none; color: var(--mute); padding: 0 4px; font-size: .75rem; }
+.plays .who { gap: 6px; }
+table.std th, table.std td { padding: 8px 3px; font-size: .8rem; } table.std td:nth-child(2), table.std th:nth-child(2) { text-align: left; width: auto; }
+td small { display: block; }
+details.box summary { cursor: pointer; } details.box[open] summary { margin-bottom: 10px; }
+.filebtn { text-align: center; cursor: pointer; display: block; }
+.auth .two label { margin-top: 12px; }
+.code { font-family: ui-monospace, monospace; font-size: 1.6rem; letter-spacing: 3px; color: var(--accent); }

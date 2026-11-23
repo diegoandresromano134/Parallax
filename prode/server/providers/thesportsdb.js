@@ -80,3 +80,16 @@ export async function lookup(extId) {
   const d = await get(`lookupevent.php?id=${extId}`);
   return d.events?.[0] ? mapEvent(d.events[0]) : null;
 }
+
+/** Tabla de posiciones oficial (puede venir vacía en copas o con la clave gratuita). */
+export async function table(comp) {
+  const season = comp.season || (await currentSeason(comp.ext_id));
+  if (!season) return [];
+  const d = await get(`lookuptable.php?l=${comp.ext_id}&s=${encodeURIComponent(season)}`);
+  const n = (v) => Number(v) || 0;
+  return (d.table || []).map((r) => ({
+    pos: n(r.intRank), team: r.strTeam, badge: r.strBadge || null, played: n(r.intPlayed), won: n(r.intWin),
+    drawn: n(r.intDraw), lost: n(r.intLoss), gf: n(r.intGoalsFor), ga: n(r.intGoalsAgainst),
+    gd: n(r.intGoalDifference), points: n(r.intPoints),
+  }));
+}

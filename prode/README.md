@@ -4,6 +4,16 @@ PRODE del fútbol argentino para jugar entre amigos con **fichas ficticias** (si
 Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Android y iPhone y se ve como una app,
 **sin publicarla en ninguna tienda** y sin cuenta de desarrollador.
 
+## Cuentas y grupos
+- **Ingreso obligatorio:** sin cuenta no se puede ver ni jugar nada.
+- **Registro:** nombre, apellido, apodo, mail, fecha de nacimiento, contraseña (8+ con letras y números) y aceptar las reglas. **Solo mayores de 16**: se calcula con la fecha de nacimiento y se valida en el servidor.
+  La edad es declarada, la app no puede verificarla. El mail no se verifica por correo (no hay servicio de mail configurado).
+- **Olvidé mi contraseña:** quien creó el grupo le pone una clave temporal (pestaña Grupo → Clave).
+- **Varios grupos:** cada grupo tiene su código/link, sus fichas, su pozo, su ranking y sus comentarios. Se puede estar en varios.
+- **Perfil:** foto, color, equipo favorito, cambio de contraseña y avisos en el celular.
+- Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
+- **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
+
 ## Cómo se juega
 - **Pronóstico (PRODE clásico):** ponés el resultado. Exacto = **3 puntos**, acertar ganador/empate = **1 punto**.
 - **Apuesta ficticia:** elegís Local / Empate / Visitante y apostás fichas (todos arrancan con 1000).
@@ -21,6 +31,7 @@ El servidor consulta [TheSportsDB](https://www.thesportsdb.com) y detecta solo l
 - Fallback manual: el admin puede crear torneos/partidos y cargar resultados a mano.
 - ⚠️ La clave gratuita de TheSportsDB limita cuántos partidos devuelve por torneo. Si ves fixtures incompletos,
   usá una clave paga (`THESPORTSDB_KEY`, unos USD 9/mes, la paga uno solo del grupo).
+  La tabla de posiciones usa la oficial si la fuente la trae; si no, se calcula con los resultados cargados. Goleadores: no hay fuente gratuita incluida.
   **Esta integración no pudo probarse contra la API real al desarrollarla** (sin acceso a internet): revisá la primera sincronización.
 
 ## Probarla ya (con partidos de mentira)
@@ -29,7 +40,7 @@ cd prode
 npm run demo          # http://localhost:3000  — código de grupo: se imprime en consola
 npm test
 ```
-Requiere Node 22.13+. No tiene dependencias. El **primer usuario que se registra es el administrador**.
+Requiere Node 22.13+. No tiene dependencias. El **primer usuario que se registra es el administrador general** (torneos y fixture); cada grupo lo maneja quien lo creó.
 
 ## Ponerla online para los amigos
 Hace falta un lugar donde corra el servidor con **HTTPS** (iPhone lo exige para instalarla) y un disco que no se borre.
@@ -42,12 +53,12 @@ Después, cada amigo abre el link y:
 - **iPhone (Safari):** Compartir → *Agregar a pantalla de inicio*.
 - **Android (Chrome):** menú ⋮ → *Instalar app* / *Agregar a pantalla principal*.
 
-Se registran con nombre + PIN + el código del grupo.
+Se registran con su mail y datos; el código de grupo es opcional al registrarse.
 
 ## Variables de entorno
 | Variable | Para qué | Por defecto |
 |---|---|---|
-| `PRODE_CODE` | Código de grupo para crear cuenta | se genera y se imprime |
+| `PRODE_PUSH_SUBJECT` | Contacto para los avisos (`mailto:...`) | `mailto:admin@prode.local` |
 | `PRODE_START_COINS` | Fichas iniciales | 1000 |
 | `THESPORTSDB_KEY` | Clave paga de TheSportsDB | clave gratuita |
 | `PRODE_DB` | Ruta de la base SQLite | `data/prode.db` |
