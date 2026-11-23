@@ -25,7 +25,9 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 
 ## Cómo se juega: tres colores de fichas
 Cada jugador tiene **tres billeteras separadas por grupo**, y el admin carga cada color por pedido. Nadie arranca con fichas y **sin fichas no se juega nada**.
-Los precios de inscripción son de ejemplo (**5.000** cada una) y se cambian por torneo en Admin → Torneos → Precios de inscripción (0 = sin ese pozo).
+Todo son **pesos ficticios**. Cada inscripción vale **$5.000** (los tres colores, editable por torneo en Admin → Torneos → Precios de inscripción; 0 = sin ese pozo).
+**De cada inscripción, $4.000 van al pozo y $1.000 quedan para el admin** (comisión del 20%, editable en Admin → Caja del admin; vale para las inscripciones nuevas).
+Si una inscripción se devuelve (salir antes de que empiece la fecha, o fecha suspendida), se devuelve completa y se descuenta la comisión.
 
 | Color | Qué es | Cómo se gana |
 |---|---|---|
@@ -40,6 +42,11 @@ Los precios de inscripción son de ejemplo (**5.000** cada una) y se cambian por
 - ⚠️ **Importante:** mientras las fichas solo las carga el admin gratis (a pedido), esto es un juego entre amigos. Si alguna vez se **cobran** fichas con dinero real
   y se entregan premios de valor, pasa a ser un juego de azar/apuestas, que en Argentina está regulado. No lo hagas sin asesoramiento.
 - Ranking → **Premios** muestra los pozos abiertos y quién va ganando en cada color. “Fichas” y “Neto” del ranking son de las verdes; “Aciertos” cuenta ganadores acertados y “Exactos” marcadores exactos.
+
+## Contadores de pozo en vivo
+Arriba a la derecha de la pantalla hay **tres contadores, uno por color**, con el pozo acumulado del grupo (lo que aportó cada inscripción, más el acumulado de la roja). Además, cada fecha y cada torneo
+muestra su propio pozo y su contador de anotados. Se actualizan solos cada 8 segundos mientras la gente se anota, con una animación corta. El admin ve los totales de todos los grupos y su **caja**
+(comisiones cobradas y pozos que se quedó la casa por color).
 
 ## Torneos y fixture automático
 El servidor consulta [TheSportsDB](https://www.thesportsdb.com) y detecta solo los torneos argentinos

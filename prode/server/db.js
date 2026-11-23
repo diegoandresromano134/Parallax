@@ -139,6 +139,10 @@ for (const [col, ddl] of [['kind', "TEXT NOT NULL DEFAULT 'league'"], ['entry_fe
 addColumn('memberships', 'red_coins', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('memberships', 'gold_coins', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('champ_entries', 'pick', 'TEXT');
+// Cada inscripción paga `fee` (ej. 5.000); al pozo van `pot` (ej. 4.000) y la diferencia es la comisión del admin.
+for (const t of ['round_entries', 'red_entries', 'champ_entries']) addColumn(t, 'pot', 'INTEGER');
+addColumn('house_take', 'kind', "TEXT NOT NULL DEFAULT 'unclaimed'"); // commission | unclaimed (pozo sin ganador)
+addColumn('house_take', 'ref', 'TEXT');
 for (const t of ['coin_requests', 'coin_log', 'rewards', 'redemptions']) addColumn(t, 'color', "TEXT NOT NULL DEFAULT 'green'");
 
 export function tx(fn) {

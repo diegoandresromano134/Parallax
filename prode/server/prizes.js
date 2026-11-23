@@ -7,13 +7,28 @@
 //     fecha siguiente y la otra mitad se la queda la casa.
 //  🟡 DORADA: inscripción por torneo para elegir al CAMPEÓN. Se reparte entre quienes acertaron; si nadie acierta
 //     se queda la casa.
-import { db } from './db.js';
+import { db, getSetting } from './db.js';
 import { enqueueForUser } from './push.js';
 
 export const CUP_RE = /libertadores|sudamericana|copa argentina|recopa|supercopa|trofeo de campeones/i;
 export const kindFor = (name) => (CUP_RE.test(name) ? 'cup' : 'league');
 /** Valores de ejemplo: 5.000 por inscripción. El admin los cambia por torneo. */
 export const defaultFees = () => ({ entry_fee: 5000, red_fee: 5000, champ_fee: 5000 });
+
+/** Comisión del admin sobre cada inscripción (porcentaje). Por defecto 20%: de $5.000, $4.000 al pozo y $1.000 al admin. */
+export const commissionPct = () => { const raw = getSetting('commission_pct'); if (raw === undefined) return 20; const v = Number(raw); return Number.isFinite(v) && v >= 0 && v <= 90 ? v : 20; };
+export function splitFee(fee, pct = commissionPct()) {
+  const house = Math.round((fee * pct) / 100);
+  return { pot: fee - house, house };
+}
+/** Anota la comisión del admin de una inscripción (ref permite devolverla si la inscripción se devuelve). */
+export function takeCommission(gid, compId, color, amount, ref, reason) {
+  if (amount > 0) db.prepare("INSERT INTO house_take(group_id, comp_id, color, amount, reason, kind, ref) VALUES (?,?,?,?,?, 'commission', ?)").run(gid, compId, color, amount, reason, ref);
+}
+export const dropCommission = (ref) => db.prepare("DELETE FROM house_take WHERE kind='commission' AND ref=?").run(ref);
+export const refGreen = (gid, comp, round, uid) => `g:${gid}:${comp}:${round}:${uid}`;
+export const refRed = (gid, comp, round, uid) => `r:${gid}:${comp}:${round}:${uid}`;
+export const refGold = (gid, comp, uid) => `c:${gid}:${comp}:${uid}`;
 
 export const WALLET = { green: 'coins', red: 'red_coins', gold: 'gold_coins' };
 export const COLOR_ES = { green: 'verdes', red: 'rojas', gold: 'doradas' };
@@ -77,14 +92,14 @@ const fmt = (n) => n.toLocaleString('es-AR');
 
 /** 🔴 Pozo de goles de la fecha. Llamar dentro de tx(), junto con el cierre de la fecha. */
 function settleRed(gid, compId, round, compName, played) {
-  const entries = db.prepare('SELECT user_id, fee FROM red_entries WHERE group_id=? AND comp_id=? AND round=?').all(gid, compId, round);
+  const entries = db.prepare('SELECT user_id, fee, COALESCE(pot, fee) AS pot FROM red_entries WHERE group_id=? AND comp_id=? AND round=?').all(gid, compId, round);
   if (!entries.length) return;
   const setPay = db.prepare('UPDATE red_entries SET payout=? WHERE group_id=? AND comp_id=? AND round=? AND user_id=?');
   if (!played) { // fecha suspendida entera: se devuelve la inscripción roja
-    for (const e of entries) { credit(e.user_id, gid, 'red', e.fee); setPay.run(e.fee, gid, compId, round, e.user_id); enqueueForUser(e.user_id, 'Fecha suspendida', `${compName} · ${round} se suspendió. Te devolvimos ${fmt(e.fee)} fichas rojas.`); }
+    for (const e of entries) { dropCommission(refRed(gid, compId, round, e.user_id)); credit(e.user_id, gid, 'red', e.fee); setPay.run(e.fee, gid, compId, round, e.user_id); enqueueForUser(e.user_id, 'Fecha suspendida', `${compName} · ${round} se suspendió. Te devolvimos ${fmt(e.fee)} fichas rojas.`); }
     return;
   }
-  const carry = carryOf(gid, compId), pot = entries.reduce((s, e) => s + e.fee, 0) + carry;
+  const carry = carryOf(gid, compId), pot = entries.reduce((s, e) => s + e.pot, 0) + carry;
   const qualified = redBoard(gid, compId, round).filter((b) => b.eligible && b.exact > 0);
   if (!qualified.length) {
     // nadie acertó goles exactos (con la mayoría de los ganadores): la mitad queda acumulada y la otra mitad se la queda la casa
@@ -113,12 +128,12 @@ export function settleRound(gid, compId, round, force = false) {
   if (left && !force) return false;
   db.prepare('INSERT INTO round_settled(group_id, comp_id, round) VALUES (?,?,?)').run(gid, compId, round);
   const comp = db.prepare('SELECT name FROM competitions WHERE id=?').get(compId).name, played = finishedIn(compId, round);
-  const entries = db.prepare('SELECT user_id, fee FROM round_entries WHERE group_id=? AND comp_id=? AND round=?').all(gid, compId, round);
+  const entries = db.prepare('SELECT user_id, fee, COALESCE(pot, fee) AS pot FROM round_entries WHERE group_id=? AND comp_id=? AND round=?').all(gid, compId, round);
   const setPay = db.prepare('UPDATE round_entries SET payout=? WHERE group_id=? AND comp_id=? AND round=? AND user_id=?');
-  if (entries.length && !played) { // fecha suspendida entera: se devuelve la inscripción
-    for (const e of entries) { credit(e.user_id, gid, 'green', e.fee); setPay.run(e.fee, gid, compId, round, e.user_id); enqueueForUser(e.user_id, 'Fecha suspendida', `${comp} · ${round} se suspendió. Te devolvimos ${fmt(e.fee)} fichas verdes.`); }
+  if (entries.length && !played) { // fecha suspendida entera: se devuelve la inscripción completa (y la comisión)
+    for (const e of entries) { dropCommission(refGreen(gid, compId, round, e.user_id)); credit(e.user_id, gid, 'green', e.fee); setPay.run(e.fee, gid, compId, round, e.user_id); enqueueForUser(e.user_id, 'Fecha suspendida', `${comp} · ${round} se suspendió. Te devolvimos ${fmt(e.fee)} fichas verdes.`); }
   } else if (entries.length) {
-    const pot = entries.reduce((s, e) => s + e.fee, 0), b = roundBoard(gid, compId, round), prizes = splitPot(pot, b);
+    const pot = entries.reduce((s, e) => s + e.pot, 0), b = roundBoard(gid, compId, round), prizes = splitPot(pot, b);
     for (const e of entries) setPay.run(prizes.get(e.user_id) || 0, gid, compId, round, e.user_id);
     for (const [uid, amount] of prizes) credit(uid, gid, 'green', amount);
     const names = [...prizes.keys()].map(nick).join(' y ');
@@ -148,8 +163,8 @@ export function settleChampionship(compId, champion) {
   const champ = String(champion || '').trim();
   if (!champ) throw Object.assign(new Error('Elegí el campeón'), { status: 400 });
   for (const { group_id: gid } of db.prepare('SELECT DISTINCT group_id FROM champ_entries WHERE comp_id=?').all(compId)) {
-    const entries = db.prepare('SELECT user_id, fee, pick FROM champ_entries WHERE group_id=? AND comp_id=? ORDER BY user_id').all(gid, compId);
-    const pot = entries.reduce((s, e) => s + e.fee, 0), winners = entries.filter((e) => (e.pick || '').toLowerCase() === champ.toLowerCase());
+    const entries = db.prepare('SELECT user_id, fee, COALESCE(pot, fee) AS pot, pick FROM champ_entries WHERE group_id=? AND comp_id=? ORDER BY user_id').all(gid, compId);
+    const pot = entries.reduce((s, e) => s + e.pot, 0), winners = entries.filter((e) => (e.pick || '').toLowerCase() === champ.toLowerCase());
     const setPay = db.prepare('UPDATE champ_entries SET payout=? WHERE group_id=? AND comp_id=? AND user_id=?');
     if (!winners.length) {
       for (const e of entries) { setPay.run(0, gid, compId, e.user_id); enqueueForUser(e.user_id, `Terminó ${comp.name}`, `El campeón fue ${champ}. Nadie lo eligió: el pozo dorado se lo queda la casa.`); }

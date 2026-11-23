@@ -169,24 +169,24 @@ test('todos los torneos igual: pozo por fecha, gana el que más puntos suma', as
     assert.equal((await join(A, comp, round)).status, 200); assert.equal((await join(A, comp, round)).status, 400);
     assert.equal((await join(B, comp, round)).status, 200);
     const pot = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp && r.round === round);
-    assert.equal(pot.pot, 200); assert.equal(pot.can_join, true);
+    assert.equal(pot.pot, 160); assert.equal(pot.can_join, true); // 2 inscripciones de 100: 80 al pozo cada una
     await pred(A, m1, 'L'); await pred(A, m2, 'E'); await pred(B, m1, 'V'); await pred(B, m2, 'V'); // resultados: 2-0 (local) y 1-1 (empate)
     await result(m1, 2, 0);
     assert.equal((await call('POST', `/api/groups/${gid}/rounds/leave`, { comp_id: comp, round }, B.token)).status, 400); // ya empezó
     assert.equal(await coins(A), a0 - 100); // la fecha sigue abierta
     await result(m2, 1, 1); // terminó la fecha: A acertó 2 ganadores y B ninguno
-    assert.equal(await coins(A), a0 + 100); assert.equal(await coins(B), b0 - 100);
+    assert.equal(await coins(A), a0 + 60); assert.equal(await coins(B), b0 - 100); // pagó 100 y cobró el pozo de 160
     const done = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp);
-    assert.equal(done.settled, true); assert.equal(done.board[0].nick, 'Diego'); assert.equal(done.board[0].payout, 200);
+    assert.equal(done.settled, true); assert.equal(done.board[0].nick, 'Diego'); assert.equal(done.board[0].payout, 160);
     await call('POST', '/api/admin/rounds/close', { group_id: gid, comp_id: comp, round }, ADM.token); // no paga dos veces
-    assert.equal(await coins(A), a0 + 100);
+    assert.equal(await coins(A), a0 + 60);
   }
   // inscripción cerrada si la fecha ya empezó
   const mm = await newMatch(lig, 'E', 'F', hrs(-1), 'Fecha 0');
   assert.equal((await join(A, lig, 'Fecha 0')).status, 400); assert.ok(mm);
   // ranking: neto de la fecha
   const rk = (await call('GET', `/api/groups/${gid}/ranking?comp=${lig}&round=Fecha%201`, null, A.token)).data.players;
-  assert.equal(rk.find((p) => p.nick === 'Diego').net, 100); assert.equal(rk.find((p) => p.nick === 'Marcos').net, -100);
+  assert.equal(rk.find((p) => p.nick === 'Diego').net, 60); assert.equal(rk.find((p) => p.nick === 'Marcos').net, -100);
 });
 
 test('partido sin nombre de fecha: es su propia fecha', async () => {
@@ -202,7 +202,7 @@ test('🔴 pozo de goles: marcador exacto + mayoría de ganadores; si nadie lo l
   const comp = await newComp('Liga Roja', 'league');
   await grant(A, 1000); await grant(B, 1000); await grant(A, 1000, gid, 'red'); await grant(B, 1000, gid, 'red');
   const [a0, b0] = [await reds(A), await reds(B)];
-  const house = async () => (await call('GET', '/api/admin/pots', null, ADM.token)).data.house.filter((h) => h.color === 'red').reduce((s, h) => s + h.amount, 0);
+  const house = async () => (await call('GET', '/api/admin/pots', null, ADM.token)).data.house.filter((h) => h.color === 'red').reduce((s, h) => s + h.amount, 0); // pozos sin ganador
   const h0 = await house();
   const m1 = await newMatch(comp, 'A', 'B', hrs(24), 'Fecha 1'), m2 = await newMatch(comp, 'C', 'D', hrs(48), 'Fecha 1');
   // sin estar anotado en verde no se puede ir a la roja
@@ -219,19 +219,19 @@ test('🔴 pozo de goles: marcador exacto + mayoría de ganadores; si nadie lo l
   assert.equal(mine.mine.pick, 'L'); assert.deepEqual(mine.mine.prediction, { home: 2, away: 0 }); assert.equal(mine.red_enrolled, true);
   await pred(A, m2, 'V', [0, 2]); await pred(B, m2, 'V');
   const pots = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp);
-  assert.equal(pots.red.pot, 50); assert.equal(pots.red.players, 1); assert.equal(pots.red.joined, true);
+  assert.equal(pots.red.pot, 40); assert.equal(pots.red.players, 1); assert.equal(pots.red.joined, true); // inscripción roja de 50: 40 al pozo
   // resultados 3-1 y 0-1: A acertó los 2 ganadores (mayoría) pero ningún marcador exacto -> nadie gana el pozo rojo
   await result(m1, 3, 1); await result(m2, 0, 1);
   assert.equal(await reds(A), a0 - 50);
-  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp).red.carry, 25); // la mitad queda acumulada
-  assert.equal(await house() - h0, 25); // y la otra mitad se la queda la casa
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === comp).red.carry, 20); // la mitad del pozo (40) queda acumulada
+  assert.equal(await house() - h0, 20); // y la otra mitad se la queda la casa
   // fecha 2 (un solo partido): A y B en rojo. B acierta el marcador exacto y el ganador -> se lleva 50 + 50 + 25 acumulados
   const m3 = await newMatch(comp, 'E', 'F', hrs(30), 'Fecha 2');
   await join(A, comp, 'Fecha 2'); await join(B, comp, 'Fecha 2'); await joinRed(A, comp, 'Fecha 2'); await joinRed(B, comp, 'Fecha 2');
   await pred(A, m3, 'L', [1, 0]); await pred(B, m3, 'L', [2, 1]);
-  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 2').red.pot, 125);
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 2').red.pot, 100); // 40 + 40 + 20 acumulados
   await result(m3, 2, 1);
-  assert.equal(await reds(B), b0 - 50 + 125); assert.equal(await reds(A), a0 - 50 - 50);
+  assert.equal(await reds(B), b0 - 50 + 100); assert.equal(await reds(A), a0 - 50 - 50);
   assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 2').red.carry, 0);
   // sin la mayoría de ganadores no se califica, aunque haya un marcador exacto
   const m4 = await newMatch(comp, 'G', 'H', hrs(40), 'Fecha 4'), m5 = await newMatch(comp, 'I', 'J', hrs(41), 'Fecha 4');
@@ -240,8 +240,8 @@ test('🔴 pozo de goles: marcador exacto + mayoría de ganadores; si nadie lo l
   await pred(B, m4, 'L', [1, 0]); await pred(B, m5, 'L', [2, 0]); // m4 exacto; m5 falla el ganador: 1 de 2 no es mayoría
   await result(m4, 1, 0); await result(m5, 0, 1);
   assert.equal(await reds(B), b1); // no cobró nada
-  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 4').red.carry, 25);
-  assert.equal(await house() - h1, 25);
+  assert.equal((await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.rounds.find((r) => r.round === 'Fecha 4').red.carry, 20);
+  assert.equal(await house() - h1, 20);
   // salir de verde saca también de roja y devuelve todo
   const m6 = await newMatch(comp, 'K', 'L', hrs(60), 'Fecha 5');
   await join(A, comp, 'Fecha 5'); await joinRed(A, comp, 'Fecha 5');
@@ -272,13 +272,13 @@ test('🟡 campeón: se elige antes del cierre, se reparte entre los que acierta
   assert.equal((await pick(A, cup, 'River')).data.changed, true); assert.equal(await golds(A), ga - 200); // cambiar la elección no cobra otra vez
   await pick(B, cup, 'Racing');
   const mid = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
-  assert.equal(mid.pot, 400); assert.equal(mid.my_pick, 'River'); assert.deepEqual(mid.picks, []); // las elecciones ajenas no se ven hasta el cierre
+  assert.equal(mid.pot, 320); assert.equal(mid.my_pick, 'River'); // 2 inscripciones de 200: 160 al pozo cada una assert.deepEqual(mid.picks, []); // las elecciones ajenas no se ven hasta el cierre
   assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, A.token)).status, 403);
   assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'Nadie' }, ADM.token)).status, 400);
   await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, ADM.token);
-  assert.equal(await golds(A), ga - 200 + 400); assert.equal(await golds(B), gb - 200);
+  assert.equal(await golds(A), ga - 200 + 320); assert.equal(await golds(B), gb - 200);
   await call('POST', `/api/admin/competitions/${cup}/close`, { champion: 'River' }, ADM.token); // no paga dos veces
-  assert.equal(await golds(A), ga - 200 + 400);
+  assert.equal(await golds(A), ga - 200 + 320);
   const done = (await call('GET', `/api/groups/${gid}/pots`, null, A.token)).data.champs.find((c) => c.comp_id === cup);
   assert.equal(done.closed, true); assert.equal(done.champion, 'River'); assert.equal(done.picks.length, 2);
   assert.equal((await pick(B, cup, 'Boca')).status, 400); // cerrado
@@ -291,11 +291,48 @@ test('🟡 campeón: se elige antes del cierre, se reparte entre los que acierta
   await call('POST', `/api/admin/competitions/${cup2}/close`, { champion: 'Nacional' }, ADM.token);
   assert.equal(await golds(A), g2a); assert.equal(await golds(B), g2b);
   const house = (await call('GET', '/api/admin/pots', null, ADM.token)).data.house;
-  assert.equal(house[0].amount, 400); assert.match(house[0].reason, /Nadie acertó/);
+  assert.equal(house[0].amount, 320); assert.match(house[0].reason, /Nadie acertó/);
   // sin fichas doradas no hay inscripción dorada
   const cup3 = await newComp('Recopa Test'); await newMatch(cup3, 'X', 'Y', hrs(24), 'Final');
   const C = (await call('POST', '/api/login', { email: 'sinrojas@mail.com', password: 'clave1234' })).data;
   assert.match((await pick(C, cup3, 'X')).data.error, /doradas/);
+});
+
+test('comisión del admin: 4.000 al pozo y 1.000 al admin por cada inscripción de 5.000, con contadores en vivo', async () => {
+  const cash = async () => (await call('GET', '/api/admin/cash', null, ADM.token)).data;
+  assert.equal((await call('GET', '/api/admin/cash', null, A.token)).status, 403);
+  const comp = (await call('POST', '/api/admin/competitions', { name: 'Liga Cinco Mil' }, ADM.token)).data.id; // precios por defecto: 5.000
+  const c = (await call('GET', '/api/admin/overview', null, ADM.token)).data.competitions.find((x) => x.id === comp);
+  assert.deepEqual([c.entry_fee, c.red_fee, c.champ_fee], [5000, 5000, 5000]);
+  const g = (await call('POST', '/api/groups', { name: 'Caja' }, A.token)).data.groups.at(-1).id;
+  for (const col of ['green', 'red', 'gold']) await grant(A, 20000, g, col);
+  const m = await newMatch(comp, 'X', 'Y', hrs(24), 'Fecha 1');
+  const before = await cash(), j0 = (await call('GET', `/api/groups/${g}/pots`, null, A.token)).data.jackpot;
+  assert.equal(before.commission_pct, 20);
+  await join(A, comp, 'Fecha 1', g); await joinRed(A, comp, 'Fecha 1', g); await pick(A, comp, 'X', g);
+  const after = await cash();
+  assert.equal(after.commission.green - before.commission.green, 1000); // 1.000 de cada 5.000 quedan al admin
+  assert.equal(after.commission.red - before.commission.red, 1000); assert.equal(after.commission.gold - before.commission.gold, 1000);
+  assert.equal((await wallet(A, g)).coins, 15000);
+  // contadores en vivo: cada color con su pozo (4.000 por inscripción) y su cantidad de anotados
+  const pots = (await call('GET', `/api/groups/${g}/pots`, null, A.token)).data;
+  assert.deepEqual([pots.jackpot.green.pot - j0.green.pot, pots.jackpot.red.pot - j0.red.pot, pots.jackpot.gold.pot - j0.gold.pot], [4000, 4000, 4000]);
+  assert.deepEqual([pots.jackpot.green.entries, pots.jackpot.red.entries, pots.jackpot.gold.entries], [1, 1, 1]);
+  const r = pots.rounds.find((x) => x.comp_id === comp); assert.equal(r.pot, 4000); assert.equal(r.red.pot, 4000);
+  assert.equal(pots.commission_pct, 20);
+  // salir antes de que empiece devuelve los 5.000 completos y también la comisión
+  await call('POST', `/api/groups/${g}/rounds/leave`, { comp_id: comp, round: 'Fecha 1' }, A.token);
+  assert.equal((await wallet(A, g)).coins, 20000); assert.equal((await wallet(A, g)).red_coins, 20000);
+  const back = await cash(); assert.equal(back.commission.green, before.commission.green); assert.equal(back.commission.red, before.commission.red);
+  // cambiar la comisión vale para inscripciones nuevas
+  assert.equal((await call('POST', '/api/admin/settings', { commission_pct: 95 }, ADM.token)).status, 400);
+  assert.equal((await call('POST', '/api/admin/settings', { commission_pct: 10 }, A.token)).status, 403);
+  await call('POST', '/api/admin/settings', { commission_pct: 10 }, ADM.token);
+  await join(A, comp, 'Fecha 1', g);
+  assert.equal((await cash()).commission.green - before.commission.green, 500);
+  assert.equal((await call('GET', `/api/groups/${g}/pots`, null, A.token)).data.rounds.find((x) => x.comp_id === comp).pot, 4500);
+  await call('POST', '/api/admin/settings', { commission_pct: 20 }, ADM.token);
+  assert.ok(m);
 });
 
 test('canje: el admin define los premios, el jugador canjea con fichas', async () => {

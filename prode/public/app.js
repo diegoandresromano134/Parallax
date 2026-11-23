@@ -9,7 +9,7 @@ const store = {
 const S = {
   token: store.get('token'), me: null, groups: [], gid: Number(store.get('gid')) || null, cfg: { min_age: 16, colors: ['#f5c542'] },
   tab: 'matches', authMode: 'login', scope: 'upcoming', comp: '', comps: [], matches: [], loading: false,
-  rank: { mode: 'coins', comp: '', round: '' }, adminPending: 0, pots: { rounds: [], champs: [] }, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
+  rank: { mode: 'coins', comp: '', round: '' }, adminPending: 0, pots: { rounds: [], champs: [], jackpot: null, commission_pct: 20 }, shown: {}, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -20,7 +20,21 @@ const fmtAgo = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60
 const dayKey = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 const group = () => S.groups.find((g) => g.id === S.gid);
 const CH = { green: { icon: '🟢', name: 'verdes', field: 'coins' }, red: { icon: '🔴', name: 'rojas', field: 'red_coins' }, gold: { icon: '🟡', name: 'doradas', field: 'gold_coins' } };
-const n$ = (n) => Number(n || 0).toLocaleString('es-AR');
+const n$ = (n) => '$' + Number(n || 0).toLocaleString('es-AR'); // pesos ficticios
+const toPot = (fee, pct) => fee - Math.round((fee * (pct ?? 20)) / 100); // lo que de cada inscripción va al pozo
+const REDUCE = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** Cambia un contador con una animación corta de cuenta y un destello. */
+function setCount(el, to, money = true) {
+  const from = el.dataset.v === undefined ? to : Number(el.dataset.v), isN = el.dataset.f === 'n';
+  const fmt = (v) => (isN ? `${Math.round(v)} ${Math.round(v) === 1 ? 'anotado' : 'anotados'}` : money ? n$(v) : String(Math.round(v)));
+  el.dataset.v = to;
+  if (from === to || REDUCE) { el.textContent = fmt(to); return; }
+  el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  const t0 = performance.now();
+  const step = (t) => { const k = Math.min(1, (t - t0) / 700); el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1 && el.isConnected) requestAnimationFrame(step); else el.textContent = fmt(to); };
+  requestAnimationFrame(step);
+}
+const live = (kind, comp, round, field, value) => `<b class="cnt" data-live="${kind}" data-c="${comp}" data-r="${esc(round || '')}" data-f="${field}" data-v="${value}">${field === 'pot' ? n$(value) : `${value} ${value === 1 ? 'anotado' : 'anotados'}`}</b>`;
 const bal = (color) => group()?.[CH[color].field] || 0;
 const colorSelect = (id, cur = 'green') => `<select class="field" id="${id}">${Object.entries(CH).map(([k, c]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${c.icon} Fichas ${c.name}</option>`).join('')}</select>`;
 
@@ -98,6 +112,14 @@ function groupForms() {
 }
 
 // ---------- estructura principal ----------
+const JK = [['green', '🟢', 'g'], ['red', '🔴', 'r'], ['gold', '🟡', 'y']];
+function potCounters(jp) {
+  return `<div class="pots" title="Pozos acumulados en vivo (lo que aportó cada inscripción)"><span class="pl">POZOS</span>${JK.map(([k, ic, c]) => `<span class="pt ${c}">${ic}<b class="cnt" id="hp-${k}" data-v="${S.shown[k] ?? jp?.[k]?.pot ?? 0}">${n$(S.shown[k] ?? jp?.[k]?.pot ?? 0)}</b></span>`).join('')}</div>`;
+}
+function paintHeaderPots(jp) {
+  if (!jp) return;
+  for (const [k] of JK) { const el = document.getElementById('hp-' + k); if (el) setCount(el, jp[k].pot); S.shown[k] = jp[k].pot; }
+}
 function shell(inner) {
   const g = group();
   document.documentElement.style.setProperty('--accent', g?.color || S.cfg.colors[0]);
@@ -107,12 +129,13 @@ function shell(inner) {
   if (!g) tabs.push(['profile', '👤', 'Perfil']);
   const badge = (k) => (k === 'admin' && S.adminPending ? `<i class="dot">${S.adminPending}</i>` : '');
   const head = g
-    ? `<div class="gsel">${S.groups.length > 1 ? `<select id="groupSel" aria-label="Grupo">${S.groups.map((x) => `<option value="${x.id}" ${x.id === S.gid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<h1>${esc(g.name)}</h1>`}</div>
-       <button class="wallets" data-tab="group" title="Tus fichas en este grupo. Tocá para pedir más o canjear.">
+    ? `<div class="toprow"><div class="gsel">${S.groups.length > 1 ? `<select id="groupSel" aria-label="Grupo">${S.groups.map((x) => `<option value="${x.id}" ${x.id === S.gid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<h1>${esc(g.name)}</h1>`}</div>${potCounters(S.pots.jackpot)}</div>
+       <button class="wallets" data-tab="group" title="Tus fichas en este grupo. Tocá para pedir más o canjear."><span class="wl">Mis fichas</span>
          <span class="w g">🟢 ${n$(g.coins)}</span><span class="w r">🔴 ${n$(g.red_coins)}</span><span class="w y">🟡 ${n$(g.gold_coins)}</span></button>`
-    : '<div class="gsel"><h1>🛠️ Panel de control</h1></div>';
+    : `<div class="toprow"><div class="gsel"><h1>🛠️ Panel de control</h1></div>${potCounters(S.pots.jackpot)}</div>`;
   $app.innerHTML = `<header class="top">${head}</header><main>${inner}</main>
     <nav class="tabs">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${i}${badge(k)}</span>${l}</button>`).join('')}</nav>`;
+  paintHeaderPots(S.pots.jackpot);
 }
 
 // ---------- partidos ----------
@@ -160,34 +183,57 @@ function matchCard(m) {
 }
 
 function roundStrip(r) {
-  const who = r.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  const pct = S.pots.commission_pct, who = r.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  const stat = `pozo ${live('g', r.comp_id, r.round, 'pot', r.pot)} · ${live('g', r.comp_id, r.round, 'n', r.players)}`;
   let body;
-  if (r.settled) body = who ? `🏆 Ganó <b>${who}</b> el pozo de ${n$(r.pot)} 🟢${r.board.find((b) => b.user_id === S.me.id)?.payout > 0 ? ' · <span class="win">¡Fue tuyo!</span>' : ''}` : 'Fecha cerrada · se devolvieron las fichas';
-  else if (r.joined) body = `🟢 Estás en la fecha: pozo <b>${n$(r.pot)}</b> · ${r.players} ${r.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leave="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : `<small>(${r.finished}/${r.matches} partidos)</small>`}`;
-  else if (r.can_join) body = `🟢 Pozo de la fecha: <b>${n$(r.pot)}</b> · ${r.players} anotados <button class="mini-btn" data-join="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(r.fee)} 🟢)</button>`;
-  else body = `🟢 Pozo de la fecha: <b>${n$(r.pot)}</b> · ${r.players} jugadores · inscripción cerrada`;
+  if (r.settled) body = who ? `🏆 Ganó <b>${who}</b> el pozo de ${n$(r.pot)} 🟢${r.board.find((b) => b.user_id === S.me.id)?.payout > 0 ? ' · <span class="win">¡Fue tuyo!</span>' : ''}` : 'Fecha cerrada · se devolvieron las inscripciones';
+  else if (r.joined) body = `🟢 Estás en la fecha · ${stat} ${r.can_join ? `<button class="link" data-leave="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : `<small>(${r.finished}/${r.matches} partidos)</small>`}`;
+  else if (r.can_join) body = `🟢 Fecha: ${stat} <button class="mini-btn" data-join="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(r.fee)} 🟢)</button><small class="share">${n$(toPot(r.fee, pct))} al pozo</small>`;
+  else body = `🟢 Fecha: ${stat} · inscripción cerrada`;
   return `<div class="strip green">${body}</div>${redStrip(r)}`;
 }
 function redStrip(r) {
   const x = r.red; if (!x) return '';
-  const win = x.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  const pct = S.pots.commission_pct, win = x.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  const stat = `pozo de goles ${live('r', r.comp_id, r.round, 'pot', x.pot)}${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${live('r', r.comp_id, r.round, 'n', x.players)}`;
   let body;
   if (r.settled) body = win ? `🔴 Pozo de goles: ganó <b>${win}</b>` : `🔴 Pozo de goles: nadie acertó los goles exactos${x.carry ? ` · <b>${n$(x.carry)}</b> pasan a la próxima fecha, el resto se lo quedó la casa` : ''}`;
-  else if (x.joined) body = `🔴 Estás en el pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} ${x.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leavered="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : ''}`;
-  else if (x.can_join) body = `🔴 Pozo de goles: <b>${n$(x.pot)}</b>${x.carry ? ` <small>(incluye ${n$(x.carry)} acumulados)</small>` : ''} · ${x.players} anotados <button class="mini-btn red" data-joinred="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(x.fee)} 🔴)</button>`;
+  else if (x.joined) body = `🔴 Estás en el ${stat} ${r.can_join ? `<button class="link" data-leavered="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : ''}`;
+  else if (x.can_join) body = `🔴 ${stat.replace('pozo de goles', 'Pozo de goles')} <button class="mini-btn red" data-joinred="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${n$(x.fee)} 🔴)</button><small class="share">${n$(toPot(x.fee, pct))} al pozo</small>`;
   else if (!r.joined) return '';
-  else body = `🔴 Pozo de goles: <b>${n$(x.pot)}</b> · inscripción cerrada`;
+  else body = `🔴 ${stat} · inscripción cerrada`;
   return `<div class="strip red">${body}</div>`;
 }
 function champStrip(c) {
-  let body;
+  const pct = S.pots.commission_pct;
+  const stat = `pozo ${live('c', c.comp_id, '', 'pot', c.pot)} · ${live('c', c.comp_id, '', 'n', c.players)}`;
   const opts = (cur) => `<select class="field team-sel" data-champsel="${c.comp_id}">${cur ? '' : '<option value="">Elegí al campeón</option>'}${c.teams.map((t) => `<option ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  let body;
   if (c.closed) body = `🟡 Campeón: <b>${esc(c.champion)}</b>${c.joined ? (c.picks.find((p) => p.nick === S.me.nick)?.payout > 0 ? ' · <span class="win">¡Acertaste!</span>' : ' · no acertaste') : ''}`;
-  else if (c.joined) body = `🟡 Tu campeón: <b>${esc(c.my_pick)}</b> · pozo ${n$(c.pot)} · ${c.players} ${c.players === 1 ? 'jugador' : 'jugadores'}${c.open ? ` · cambiar: ${opts(c.my_pick)}<button class="mini-btn gold" data-champ="${c.comp_id}">Cambiar</button>` : ''}`;
-  else if (c.open) body = `🟡 ¿Quién sale campeón? Pozo <b>${n$(c.pot)}</b> · ${c.players} anotados ${opts('')}<button class="mini-btn gold" data-champ="${c.comp_id}">Elegir (${n$(c.fee)} 🟡)</button>`;
-  else body = `🟡 Campeón: pozo ${n$(c.pot)} · inscripción cerrada`;
+  else if (c.joined) body = `🟡 Tu campeón: <b>${esc(c.my_pick)}</b> · ${stat}${c.open ? ` · cambiar: ${opts(c.my_pick)}<button class="mini-btn gold" data-champ="${c.comp_id}">Cambiar</button>` : ''}`;
+  else if (c.open) body = `🟡 ¿Quién sale campeón? ${stat} ${opts('')}<button class="mini-btn gold" data-champ="${c.comp_id}">Elegir (${n$(c.fee)} 🟡)</button><small class="share">${n$(toPot(c.fee, pct))} al pozo</small>`;
+  else body = `🟡 Campeón: ${stat} · inscripción cerrada`;
   return `<div class="strip gold">${body}</div>`;
 }
+
+/** Actualiza en el lugar los contadores de cada fecha y torneo cuando cambian los anotados. */
+function applyLive(pots) {
+  document.querySelectorAll('[data-live]').forEach((el) => {
+    const { live: k, c, r, f } = el.dataset;
+    const round = pots.rounds.find((x) => String(x.comp_id) === c && x.round === r);
+    const obj = k === 'g' ? round : k === 'r' ? round?.red : pots.champs.find((x) => String(x.comp_id) === c);
+    if (obj) setCount(el, f === 'pot' ? obj.pot : obj.players, f === 'pot');
+  });
+}
+async function refreshPots() {
+  if (!S.token || !S.me || document.hidden) return;
+  try {
+    const jp = group() ? null : S.me.is_admin ? { jackpot: await api('GET', '/api/admin/jackpot') } : null;
+    if (group()) { const pots = await api('GET', `/api/groups/${S.gid}/pots`); S.pots = pots; paintHeaderPots(pots.jackpot); applyLive(pots); }
+    else if (jp) { S.pots.jackpot = jp.jackpot; paintHeaderPots(jp.jackpot); }
+  } catch { /* sin conexión: se reintenta */ }
+}
+setInterval(refreshPots, 8000);
 
 function renderMatches() {
   const chips = [['', 'Todos'], ...S.comps.map((c) => [String(c.id), c.name])];
@@ -265,7 +311,7 @@ async function renderPrizes() {
       <b>🟢 Verdes:</b> te anotás a una fecha o ronda y pronosticás <b>quién gana</b> en todos sus partidos. Gana el pozo verde quien acierta más ganadores.<br>
       <b>🔴 Rojas:</b> inscripción aparte para el pozo de <b>goles</b> de esa fecha (hay que estar en verde). Pronosticás el marcador exacto. Para llevártelo tenés que haber acertado también la mayoría de los ganadores y tener marcadores exactos. Si nadie lo logra, la mitad del pozo queda acumulada para la fecha siguiente y la otra mitad se la queda la casa.<br>
       <b>🟡 Doradas:</b> elegís al campeón del torneo. El pozo se reparte entre quienes aciertan; si nadie acierta, se lo queda la casa.<br>
-      Cada color es una billetera aparte y cada pozo se paga en su color. Podés canjear fichas por premios en la pestaña Grupo.</p></div>
+      Cada color es una billetera aparte y cada pozo se paga en su color. Todo son <b>pesos ficticios</b>: cada inscripción vale ${n$(5000)} y de cada una, ${n$(toPot(5000, pots.commission_pct))} van al pozo y ${n$(5000 - toPot(5000, pots.commission_pct))} quedan para el admin. Podés canjear fichas por premios en la pestaña Grupo.</p></div>
     ${pots.champs.map((c) => `<div class="box"><h3>🟡 ${esc(c.comp)} · campeón</h3>${champStrip(c).replace('class="strip gold"', 'class="strip gold flat"')}
       ${c.closed && c.picks.length ? `<table class="std"><thead><tr><th>Jugador</th><th>Eligió</th><th>Premio</th></tr></thead><tbody>${c.picks.map((p) => `<tr><td><span class="who">${avatar(p, 24)}<span>${esc(p.nick)}</span></span></td><td>${esc(p.pick)}</td><td>${p.payout > 0 ? `<span class="win">+${n$(p.payout)}</span>` : '—'}</td></tr>`).join('')}</tbody></table>` : '<p class="help">Las elecciones de los demás se ven cuando se cierra el campeonato. Lo cierra el admin.</p>'}</div>`).join('')}
     ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip green"', 'class="strip green flat"').replace('class="strip red"', 'class="strip red flat"')}
@@ -381,10 +427,10 @@ async function renderProfile() {
 
 async function renderAdmin() {
   shell('<div class="empty">Cargando…</div>');
-  const [ov, reqs, users, ledger, pending, pots, rewards, reds] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
+  const [ov, reqs, users, ledger, pending, pots, rewards, reds, cash, jp] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
     api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches'), api('GET', '/api/admin/pots'),
-    api('GET', '/api/admin/rewards'), api('GET', '/api/admin/redemptions')]);
-  S.adminPending = reqs.length + reds.length; S.admin = ov;
+    api('GET', '/api/admin/rewards'), api('GET', '/api/admin/redemptions'), api('GET', '/api/admin/cash'), api('GET', '/api/admin/jackpot')]);
+  S.adminPending = reqs.length + reds.length; S.admin = ov; if (!group()) S.pots.jackpot = jp;
   const comps = ov.competitions, src = ov.source, g0 = ov.groups[0];
   const sec = (title, body, open) => `<details class="box" ${open ? 'open' : ''}><summary><b>${title}</b></summary><div style="margin-top:10px">${body}</div></details>`;
   shell(`<p class="help" style="margin:0 0 10px">Solo vos ves esta pantalla. Acá manejás las fichas, la suscripción de datos y los torneos de todos los grupos.</p>
@@ -392,6 +438,11 @@ async function renderAdmin() {
         <div class="who"><b>${esc(r.nick)} pide ${n$(r.amount)} ${CH[r.color].icon}</b><small>${esc(r.group_name)} · tiene ${n$(r.coins)} ${CH[r.color].icon} · ${fmtAgo(r.created_at)}</small></div>
         ${r.note ? `<p class="help">“${esc(r.note)}”</p>` : ''}
         <div class="inline two" style="margin-top:6px"><input class="field" name="amt" type="number" min="1" value="${r.amount}" aria-label="Fichas ${CH[r.color].name} a cargar"><div class="two"><button class="primary nomargin" data-act="reqOk">Cargar</button><button class="ghost" data-act="reqNo">Rechazar</button></div></div></div>`).join('') : '<p class="help">No hay pedidos pendientes.</p>', true)}
+    ${sec('💼 Caja del admin', `<div class="walletbox">${JK.map(([k, ic, c]) => `<div class="w ${c}"><b>${ic} ${n$(cash.commission[k])}</b><small>Comisiones cobradas</small></div>`).join('')}</div>
+        <div class="walletbox">${JK.map(([k, ic, c]) => `<div class="w ${c}"><b>${ic} ${n$(cash.unclaimed[k])}</b><small>Pozos sin ganador (la casa)</small></div>`).join('')}</div>
+        <label class="l">Comisión por inscripción (%)</label><div class="inline two"><input class="field" id="commPct" type="number" min="0" max="90" value="${cash.commission_pct}"><button class="primary nomargin" data-act="saveComm">Guardar</button></div>
+        <p class="help">Con ${cash.commission_pct}%, de cada inscripción de ${n$(5000)}: <b>${n$(toPot(5000, cash.commission_pct))}</b> van al pozo y <b>${n$(5000 - toPot(5000, cash.commission_pct))}</b> quedan para vos. Vale para las inscripciones nuevas. Si una inscripción se devuelve (por salir antes de que empiece o por fecha suspendida), se devuelve completa y se descuenta tu comisión.</p>
+        ${cash.recent.length ? cash.recent.map((h) => `<div class="row"><div>${esc(h.reason || '')}<small>${esc(h.group_name)} · ${h.kind === 'commission' ? 'comisión' : 'pozo sin ganador'} · ${fmtAgo(h.created_at)}</small></div><b class="win">+${n$(h.amount)} ${CH[h.color].icon}</b></div>`).join('') : '<p class="help">Todavía no hay comisiones.</p>'}`, true)}
     ${sec(`Canjes pendientes${reds.length ? ` (${reds.length})` : ''}`, reds.length ? reds.map((r) => `<div class="req" data-did="${r.id}"><div class="who"><b>${esc(r.title)}</b><small>${esc(r.nick)} · ${esc(r.group_name)} · ${n$(r.cost)} ${CH[r.color].icon} · ${fmtAgo(r.created_at)}<br>${esc(r.email)}</small></div>
         <div class="two" style="margin-top:6px"><button class="primary nomargin" data-act="redOk">Marcar entregado</button><button class="ghost" data-act="redNo">Rechazar y devolver</button></div></div>`).join('') : '<p class="help">No hay canjes pendientes.</p>', reds.length > 0)}
     ${sec('Premios para canjear', `<p class="help" style="margin-top:0">Lo que definas acá aparece en la pestaña Grupo de todos los jugadores. Al canjear se descuentan las fichas.</p>
@@ -603,6 +654,9 @@ document.addEventListener('click', async (e) => {
       if (!Number.isInteger(amount) || !amount) throw new Error('Poné cuántas fichas');
       await api('POST', '/api/admin/grant', { group_id: Number(document.getElementById('grGroup').value), user_id: Number(document.getElementById('grUser').value), amount, color: document.getElementById('grColor').value, reason: document.getElementById('grWhy').value });
       toast('Listo'); return render();
+    }
+    if (t.dataset.act === 'saveComm') {
+      await api('POST', '/api/admin/settings', { commission_pct: Number(document.getElementById('commPct').value) }); toast('Comisión guardada'); return render();
     }
     if (t.dataset.act === 'saveKey' || t.dataset.act === 'rmKey') {
       const key = t.dataset.act === 'rmKey' ? '' : document.getElementById('keyInp').value.trim();
