@@ -23,9 +23,20 @@ Es una **app web instalable (PWA)**: se agrega a la pantalla de inicio de Androi
 - Ranking general o filtrado por **torneo y fecha** (para saber quién ganó la semana), tabla de posiciones y comentarios por partido.
 - **Avisos (Web Push):** 90 min antes del cierre si no jugaste, y cuando termina un partido. En iPhone solo con la app instalada (iOS 16.4+). Usa claves VAPID que el servidor genera solo; `PRODE_PUSH_SUBJECT` = `mailto:tu@mail` recomendado. **No pude probarlo contra Apple/Google desde acá.**
 
+## Premios: ligas por fecha, copas por partido y campeonato
+- **Ligas** (Liga Profesional, Primera Nacional…): se juega por **fecha**. Los jugadores se anotan al pozo de la fecha pagando una inscripción en fichas
+  (100 por defecto) **antes de que empiece la fecha**. Cuando terminan todos sus partidos gana quien suma más puntos; desempata quien tuvo más resultados
+  exactos y luego quien erró menos goles (un partido sin pronóstico cuenta como error grande). Si siguen empatados, se reparte. En ligas no hay apuesta por partido.
+- **Copas** (Libertadores, Sudamericana, Copa Argentina, Recopa, Supercopa): premio **por partido** con el pozo de apuestas (Local/Empate/Visitante), y además un
+  **pozo del campeonato** (300 por defecto) que se reparte al final entre quienes acumularon más puntos. Solo cuentan los partidos que empiezan después de anotarse.
+  **Lo cierra el admin** (Admin → Premios en juego → Cerrar y repartir) cuando termina el torneo; no se cierra solo porque las copas cargan sus fases de a poco.
+- El tipo de torneo se detecta por el nombre y se cambia en Admin → Torneos → Premios de este torneo, donde también se editan las inscripciones (0 = sin pozo).
+- Una fecha trabada (por ejemplo, un partido postergado) se cierra a mano desde el panel. Una fecha suspendida entera devuelve las inscripciones.
+- Ranking → **Premios** muestra los pozos abiertos, quién va ganando y quién se llevó cada uno.
+
 ## Cómo se juega
 - **Pronóstico (PRODE clásico):** ponés el resultado. Exacto = **3 puntos**, acertar ganador/empate = **1 punto**.
-- **Apuesta ficticia:** elegís Local / Empate / Visitante y apostás fichas (las carga el admin a pedido).
+- **Apuesta ficticia (solo en copas):** elegís Local / Empate / Visitante y apostás fichas (las carga el admin a pedido).
   Las fichas de todos forman un **pozo** que se reparte entre quienes acertaron, según cuánto puso cada uno.
   Si nadie acierta (o se suspende el partido) se devuelven las fichas.
 - Todo se **cierra cuando arranca el partido**; ahí se ven las jugadas de los demás.

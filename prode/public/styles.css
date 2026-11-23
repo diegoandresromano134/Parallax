@@ -111,3 +111,13 @@ nav.tabs button span { position: relative; display: block; width: fit-content; m
 .req { border-bottom: 1px solid var(--line); padding: 10px 0; } .req:last-child { border: 0; }
 details.box summary { list-style: none; } details.box summary::after { content: '▾'; float: right; color: var(--mute); }
 details.box[open] summary::after { content: '▴'; }
+
+.seg button { font-size: .85rem; }
+.roundhead { font: 700 .8rem var(--body); letter-spacing: .02em; color: var(--text); margin: 12px 0 6px; }
+.strip { background: #f5c54214; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; font-size: .86rem; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.strip.cup { background: #4cc9f012; border-color: #4cc9f0; }
+.strip.flat { background: none; border: 0; padding: 0 0 8px; }
+.mini-btn { background: var(--accent); color: var(--ink); font-weight: 700; border-radius: 8px; padding: 6px 10px; font-size: .8rem; }
+details.mini { margin: 4px 0 10px; } details.mini summary { cursor: pointer; font-size: .8rem; color: var(--mute); }
+details.mini summary::after { content: ''; }
+.comprow { border-bottom: 1px solid #ffffff12; }

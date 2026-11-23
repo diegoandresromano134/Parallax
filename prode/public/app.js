@@ -9,7 +9,7 @@ const store = {
 const S = {
   token: store.get('token'), me: null, groups: [], gid: Number(store.get('gid')) || null, cfg: { min_age: 16, colors: ['#f5c542'] },
   tab: 'matches', authMode: 'login', scope: 'upcoming', comp: '', comps: [], matches: [], loading: false,
-  rank: { mode: 'coins', comp: '', round: '' }, adminPending: 0, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
+  rank: { mode: 'coins', comp: '', round: '' }, adminPending: 0, pots: { rounds: [], champs: [] }, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -132,7 +132,15 @@ function matchCard(m) {
   }
   if (m.locked) {
     return `<article class="card" data-id="${m.id}">${header}<div class="teams">${team(m.home, m.home_badge)}<div class="score final">${m.home_goals ?? '·'} - ${m.away_goals ?? '·'}</div>${team(m.away, m.away_badge)}</div>
-      <div class="result"><div>🔒 Cerrado. ${p ? `Tu pronóstico: <b>${p.home}-${p.away}</b>.` : 'No pronosticaste.'} ${bet ? `Apostaste ${bet.stake} 🪙 a <b>${esc(pickName(m, bet.pick))}</b>.` : ''}</div><div>Pozo en juego: <b>${total} 🪙</b></div></div>${footer}</article>`;
+      <div class="result"><div>🔒 Cerrado. ${p ? `Tu pronóstico: <b>${p.home}-${p.away}</b>.` : 'No pronosticaste.'} ${bet ? `Apostaste ${bet.stake} 🪙 a <b>${esc(pickName(m, bet.pick))}</b>.` : ''}</div>${m.kind === 'league' ? '' : `<div>Pozo en juego: <b>${total} 🪙</b></div>`}</div>${footer}</article>`;
+  }
+  if (m.kind === 'league') {
+    return `<article class="card" data-id="${m.id}">${header}
+      <div class="teams">${team(m.home, m.home_badge)}
+        <div class="score"><input name="h" type="number" inputmode="numeric" min="0" max="30" value="${p?.home ?? ''}" placeholder="-" aria-label="Goles ${esc(m.home)}">
+        <span>:</span><input name="a" type="number" inputmode="numeric" min="0" max="30" value="${p?.away ?? ''}" placeholder="-" aria-label="Goles ${esc(m.away)}"></div>${team(m.away, m.away_badge)}</div>
+      <button class="primary" data-act="save">Guardar pronóstico</button>
+      <div class="help">${p ? 'Podés cambiarlo hasta que empiece el partido. ' : ''}Suma 3 puntos si acertás el resultado exacto y 1 si acertás ganador o empate.</div>${footer}</article>`;
   }
   const sel = bet?.pick;
   const pick = (k) => `<button class="pick ${sel === k ? 'on' : ''}" data-pick="${k}">${esc(pickName(m, k))}<small>${m.pool[k].total ? `${m.pool[k].total} 🪙 · ${m.pool[k].n}` : 'sin apuestas'}</small></button>`;
@@ -148,6 +156,24 @@ function matchCard(m) {
     ${p || bet ? '<div class="help">Podés cambiarla hasta que empiece el partido.</div>' : ''}${footer}</article>`;
 }
 
+function roundStrip(r) {
+  const who = r.board.filter((b) => b.payout > 0).map((b) => esc(b.nick)).join(' y ');
+  let body;
+  if (r.settled) body = who ? `🏆 Ganó <b>${who}</b> el pozo de ${r.pot} 🪙${r.board.find((b) => b.user_id === S.me.id)?.payout > 0 ? ' · <span class="win">¡Fue tuyo!</span>' : ''}` : `Fecha cerrada · se devolvieron las fichas`;
+  else if (r.joined) body = `✅ Estás en el pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} ${r.players === 1 ? 'jugador' : 'jugadores'} ${r.can_join ? `<button class="link" data-leave="${r.comp_id}" data-round="${esc(r.round)}">Salir</button>` : `<small>(${r.finished}/${r.matches} partidos)</small>`}`;
+  else if (r.can_join) body = `💰 Pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} anotados <button class="mini-btn" data-join="${r.comp_id}" data-round="${esc(r.round)}">Anotarme (${r.fee} 🪙)</button>`;
+  else body = `Pozo de la fecha: <b>${r.pot} 🪙</b> · ${r.players} jugadores · inscripción cerrada`;
+  return `<div class="strip">${body}</div>`;
+}
+function champStrip(c) {
+  let body;
+  if (c.closed) body = `🏆 Campeonato cerrado${c.board[0]?.payout ? ` · ganó <b>${esc(c.board[0].nick)}</b> (+${c.board[0].payout} 🪙)` : ''}`;
+  else if (c.joined) body = `✅ Estás en el campeonato: pozo <b>${c.pot} 🪙</b> · ${c.players} jugadores${c.board[0] ? ` · puntero: ${esc(c.board[0].nick)} (${c.board[0].pts} pts)` : ''}`;
+  else if (c.open) body = `🏆 Campeonato: pozo <b>${c.pot} 🪙</b> · ${c.players} anotados <button class="mini-btn" data-champ="${c.comp_id}">Anotarme (${c.fee} 🪙)</button>`;
+  else body = `Campeonato: pozo ${c.pot} 🪙 · inscripción cerrada`;
+  return `<div class="strip cup">${body}</div>`;
+}
+
 function renderMatches() {
   const chips = [['', 'Todos'], ...S.comps.map((c) => [String(c.id), c.name])];
   const g = group();
@@ -157,10 +183,21 @@ function renderMatches() {
   if (S.loading && !S.matches.length) html += '<div class="empty">Cargando…</div>';
   else if (!S.matches.length) html += `<div class="empty">${S.scope === 'upcoming' ? 'No hay partidos próximos.' : 'Todavía no hay resultados.'}<br><span class="help">${S.me.is_admin ? 'Entrá a Admin y tocá “Actualizar fixture”.' : 'El administrador tiene que cargar los torneos.'}</span></div>`;
   else {
-    let last = '';
+    let last = '', lastRound = '';
+    const seenCups = new Set();
     for (const m of S.matches) {
       const k = dayKey(m.kickoff);
       if (k !== last) { html += `<h2 class="day">${esc(fmtDay(m.kickoff))}</h2>`; last = k; }
+      if (m.kind === 'league' && m.round && `${m.comp_id}|${m.round}` !== lastRound) {
+        lastRound = `${m.comp_id}|${m.round}`;
+        const r = S.pots.rounds.find((x) => x.comp_id === m.comp_id && x.round === m.round);
+        if (r) html += `<div class="roundhead">${esc(m.comp)} · ${esc(m.round)}</div>${roundStrip(r)}`;
+      }
+      if (m.kind === 'cup' && !seenCups.has(m.comp_id)) {
+        seenCups.add(m.comp_id);
+        const c = S.pots.champs.find((x) => x.comp_id === m.comp_id);
+        if (c) html += champStrip(c);
+      }
       html += matchCard(m);
     }
   }
@@ -176,8 +213,8 @@ async function loadMatches() {
   S.loading = true;
   try {
     const q = new URLSearchParams({ scope: S.scope, group: S.gid }); if (S.comp) q.set('comp', S.comp);
-    const [matches, comps, me] = await Promise.all([api('GET', `/api/matches?${q}`), api('GET', '/api/competitions'), api('GET', '/api/me')]);
-    S.matches = matches; S.comps = comps; applyBundle(me);
+    const [matches, comps, me, pots] = await Promise.all([api('GET', `/api/matches?${q}`), api('GET', '/api/competitions'), api('GET', '/api/me'), api('GET', `/api/groups/${S.gid}/pots`)]);
+    S.matches = matches; S.comps = comps; S.pots = pots; applyBundle(me);
   } catch (e) { toast(e.message, true); }
   S.loading = false;
   if (S.tab === 'matches' && !document.activeElement?.matches?.('input, textarea')) renderMatches();
@@ -197,7 +234,27 @@ function paintThread(card, id) {
 }
 
 // ---------- ranking ----------
+const rankSeg = (mode) => `<div class="seg"><button data-rank="coins" class="${mode === 'coins' ? 'on' : ''}">🪙 Fichas</button><button data-rank="points" class="${mode === 'points' ? 'on' : ''}">🎯 Puntos</button><button data-rank="prizes" class="${mode === 'prizes' ? 'on' : ''}">💰 Premios</button></div>`;
+function board(rows, showPrize) {
+  return `<table class="std"><thead><tr><th>#</th><th>Jugador</th><th>Pts</th><th>Exactos</th>${showPrize ? '<th>Premio</th>' : ''}</tr></thead><tbody>
+    ${rows.map((b, i) => `<tr class="${b.user_id === S.me.id ? 'me' : ''}"><td>${i + 1}</td><td><span class="who">${avatar(b, 24)}<span>${esc(b.nick)}</span></span></td><td>${b.pts}</td><td>${b.exact}</td>${showPrize ? `<td>${b.payout > 0 ? `<span class="win">+${b.payout}</span>` : b.payout === 0 ? '—' : ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+}
+async function renderPrizes() {
+  shell(`${rankSeg('prizes')}<div class="empty">Cargando…</div>`);
+  const pots = await api('GET', `/api/groups/${S.gid}/pots`); S.pots = pots;
+  const rounds = pots.rounds.filter((r) => r.players > 0 || r.can_join).sort((a, b) => (a.settled - b.settled) || a.first_kickoff.localeCompare(b.first_kickoff));
+  const html = `${rankSeg('prizes')}
+    <div class="box"><h3>Cómo se gana</h3><p class="help"><b>Ligas:</b> cada fecha tiene un pozo. Te anotás antes de que empiece, y se lo lleva quien suma más puntos en todos los partidos de la fecha (desempata quien tuvo más resultados exactos y luego quien erró menos goles).<br>
+      <b>Copas:</b> cada partido tiene su pozo de apuestas, y además hay un pozo del campeonato que se reparte al final entre quienes acumularon más puntos.</p></div>
+    ${pots.champs.map((c) => `<div class="box"><h3>🏆 ${esc(c.comp)} · campeonato</h3>${champStrip(c).replace('class="strip cup"', 'class="strip cup flat"')}
+      ${c.board.length ? board(c.board, c.closed) : '<p class="help">Todavía no hay anotados.</p>'}
+      <p class="help">Suman los partidos que empiezan después de anotarte. Lo cierra el admin cuando termina el torneo.</p></div>`).join('')}
+    ${rounds.length ? rounds.map((r) => `<div class="box"><h3>${esc(r.comp)} · ${esc(r.round)}</h3>${roundStrip(r).replace('class="strip"', 'class="strip flat"')}${r.board.length ? board(r.board, r.settled) : ''}</div>`).join('') : '<div class="empty">No hay fechas con pozo por ahora.</div>'}`;
+  shell(html);
+}
+
 async function renderRanking() {
+  if (S.rank.mode === 'prizes') return renderPrizes();
   shell('<div class="empty">Cargando…</div>');
   const R = S.rank, q = new URLSearchParams(); if (R.comp) q.set('comp', R.comp); if (R.round) q.set('round', R.round);
   const [{ filtered, players }, comps] = await Promise.all([api('GET', `/api/groups/${S.gid}/ranking?${q}`), api('GET', '/api/competitions')]);
@@ -207,14 +264,14 @@ async function renderRanking() {
   const val = (p) => (byPts ? p.points : filtered ? p.net : p.coins);
   const sorted = [...players].sort((a, b) => byPts ? b.points - a.points || b.exact - a.exact || b.net - a.net : val(b) - val(a) || b.points - a.points);
   const sign = (n) => (n > 0 ? `+${n}` : String(n));
-  shell(`<div class="seg"><button data-rank="coins" class="${byPts ? '' : 'on'}">🪙 Fichas</button><button data-rank="points" class="${byPts ? 'on' : ''}">🎯 Puntos PRODE</button></div>
+  shell(`${rankSeg(byPts ? 'points' : 'coins')}
     <div class="inline two"><select class="field" id="rkComp"><option value="">Todos los torneos</option>${comps.map((c) => `<option value="${c.id}" ${String(c.id) === R.comp ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
     <select class="field" id="rkRound" ${rounds.length ? '' : 'disabled'}><option value="">Todas las fechas</option>${rounds.map((r) => `<option ${r === R.round ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
     <table><thead><tr><th>#</th><th>Jugador</th><th>${byPts ? 'Pts' : filtered ? 'Neto' : 'Fichas'}</th><th>${byPts ? 'Exactos' : 'Pts'}</th></tr></thead><tbody>
     ${sorted.map((p, i) => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][i] || i + 1}</td>
       <td><span class="who">${avatar(p, 28)}<span>${esc(p.nick)}${p.fav_team ? `<small>${esc(p.fav_team)}</small>` : ''}</span></span></td>
       <td>${byPts ? p.points : filtered ? `<span class="${p.net > 0 ? 'win' : p.net < 0 ? 'lose' : ''}">${sign(p.net)}</span>` : p.coins.toLocaleString('es-AR')}</td><td>${byPts ? p.exact : p.points}</td></tr>`).join('')}</tbody></table>
-    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate.'}</p>`);
+    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate. “Neto” suma apuestas, pozos de fecha y campeonato.'}</p>`);
 }
 
 // ---------- tablas ----------
@@ -296,8 +353,8 @@ async function renderProfile() {
 
 async function renderAdmin() {
   shell('<div class="empty">Cargando…</div>');
-  const [ov, reqs, users, ledger, pending] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
-    api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches')]);
+  const [ov, reqs, users, ledger, pending, pots] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
+    api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches'), api('GET', '/api/admin/pots')]);
   S.adminPending = reqs.length; S.admin = ov;
   const comps = ov.competitions, src = ov.source, g0 = ov.groups[0];
   const sec = (title, body, open) => `<details class="box" ${open ? 'open' : ''}><summary><b>${title}</b></summary><div style="margin-top:10px">${body}</div></details>`;
@@ -316,8 +373,17 @@ async function renderAdmin() {
         ${src.key_set ? '<button class="ghost block" data-act="rmKey">Volver a la clave gratuita</button>' : ''}<div class="help" id="keyMsg"></div>
         <button class="primary" data-act="sync">🔄 Actualizar fixture ahora</button>
         <p class="help">Se actualiza solo: resultados cada 10 min, fixture cada 6 h y torneos nuevos una vez por día.</p>`)}
-    ${sec('Torneos', `${comps.length ? comps.map((c) => `<div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
-        <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><button class="ghost" data-act="addComp">Crear</button></div>`)}
+    ${sec(`Premios en juego${pots.rounds.length + pots.champs.filter((c) => c.players).length ? ` (${pots.rounds.length + pots.champs.filter((c) => c.players).length})` : ''}`, `<p class="help" style="margin-top:0">Las fechas se reparten solas cuando terminan todos sus partidos. Si una quedó trabada (partido postergado), cerrala acá. El campeonato de una copa lo cerrás vos cuando termina el torneo.</p>
+        ${pots.rounds.map((r) => `<div class="row"><div>${esc(r.comp)} · ${esc(r.round)}<small>${esc(r.group_name)} · ${r.players} jugadores · pozo ${r.pot} · ${r.pending ? r.pending + ' partidos sin cerrar' : 'listo'}</small></div><button class="ghost" data-closeround="${r.group_id}|${r.comp_id}|${esc(r.round)}">Cerrar fecha</button></div>`).join('')}
+        ${pots.champs.map((c) => `<div class="row"><div>🏆 ${esc(c.comp)}<small>${c.groups} grupos · ${c.players} jugadores · pozo ${c.pot} · ${c.pending ? c.pending + ' partidos sin jugar' : 'todos los partidos jugados'}</small></div><button class="ghost" data-closecup="${c.comp_id}" data-n="${esc(c.comp)}">Cerrar y repartir</button></div>`).join('')}
+        ${pots.rounds.length + pots.champs.length ? '' : '<p class="help">No hay pozos abiertos.</p>'}`, pots.champs.some((c) => c.pending === 0 && c.players))}
+    ${sec('Torneos', `${comps.length ? comps.map((c) => `<div class="comprow" data-cid="${c.id}"><div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos · ${c.kind === 'cup' ? 'copa' : 'liga'}</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>
+        <details class="mini"><summary>Premios de este torneo</summary><div class="inline two"><label class="l">Tipo<select class="field" name="kind"><option value="league" ${c.kind === 'league' ? 'selected' : ''}>Liga (pozo por fecha)</option><option value="cup" ${c.kind === 'cup' ? 'selected' : ''}>Copa (por partido + campeonato)</option></select></label>
+        <label class="l">Inscripción por fecha<input class="field" name="entry_fee" type="number" min="0" value="${c.entry_fee}"></label>
+        <label class="l">Inscripción campeonato<input class="field" name="champ_fee" type="number" min="0" value="${c.champ_fee}"></label>
+        <label class="l">Campeonato<select class="field" name="champ_open"><option value="1" ${c.champ_open ? 'selected' : ''}>Inscripción abierta</option><option value="0" ${c.champ_open ? '' : 'selected'}>Cerrada</option></select></label></div>
+        <button class="ghost block" data-act="saveComp">Guardar premios</button><p class="help">0 = sin pozo. En ligas se usa “por fecha”; en copas, “campeonato”.</p></details></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
+        <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><select class="field" id="newKind"><option value="cup">Copa</option><option value="league">Liga</option></select></div><button class="ghost block" data-act="addComp">Crear torneo</button>`)}
     ${sec('Cargar partidos y resultados a mano', `<div class="inline"><select class="field" id="mComp">${comps.filter((c) => c.enabled).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
         <div class="inline two"><input class="field" id="mHome" placeholder="Local"><input class="field" id="mAway" placeholder="Visitante"></div><input class="field" id="mRound" placeholder="Fecha (ej: Fecha 3)"><input class="field" id="mWhen" type="datetime-local"><button class="ghost" data-act="addMatch">Agregar partido</button></div>
         <h3 style="margin-top:14px">Esperando resultado</h3>${pending.length ? pending.map((m) => `<div class="row" data-mid="${m.id}"><div>${esc(m.home)} vs ${esc(m.away)}<small>${esc(m.comp)}</small></div><div><input class="mini" data-r="h" type="number" min="0" aria-label="Goles local"> <input class="mini" data-r="a" type="number" min="0" aria-label="Goles visitante"> <button class="ghost" data-act="result">OK</button></div></div>`).join('') : '<p class="help">No hay partidos esperando resultado.</p>'}`)}
@@ -447,6 +513,23 @@ document.addEventListener('click', async (e) => {
       else { try { await navigator.clipboard.writeText(t.dataset.share); toast('Link copiado'); } catch { toast(t.dataset.share); } }
       return;
     }
+    if (t.dataset.join) { await api('POST', `/api/groups/${S.gid}/rounds/join`, { comp_id: Number(t.dataset.join), round: t.dataset.round }); toast('¡Anotado en la fecha!'); return loadMatches(); }
+    if (t.dataset.leave) { await api('POST', `/api/groups/${S.gid}/rounds/leave`, { comp_id: Number(t.dataset.leave), round: t.dataset.round }); toast('Inscripción devuelta'); return loadMatches(); }
+    if (t.dataset.champ) { await api('POST', `/api/groups/${S.gid}/champs/${t.dataset.champ}/join`, {}); toast('¡Anotado en el campeonato!'); return loadMatches(); }
+    if (t.dataset.closeround) {
+      const [gid, cid, ...r] = t.dataset.closeround.split('|');
+      if (!confirm('¿Cerrar esta fecha y repartir el pozo con los partidos ya jugados?')) return;
+      await api('POST', '/api/admin/rounds/close', { group_id: Number(gid), comp_id: Number(cid), round: r.join('|') }); toast('Fecha cerrada'); return render();
+    }
+    if (t.dataset.closecup) {
+      if (!confirm(`¿Cerrar "${t.dataset.n}" y repartir el pozo del campeonato en todos los grupos? No se puede deshacer.`)) return;
+      await api('POST', `/api/admin/competitions/${t.dataset.closecup}/close`, {}); toast('Campeonato cerrado y premios repartidos'); return render();
+    }
+    if (t.dataset.act === 'saveComp') {
+      const row = t.closest('.comprow'), v = (n) => row.querySelector(`[name=${n}]`).value;
+      await api('PATCH', `/api/admin/competitions/${row.dataset.cid}`, { kind: v('kind'), entry_fee: Number(v('entry_fee')), champ_fee: Number(v('champ_fee')), champ_open: v('champ_open') === '1' });
+      toast('Premios guardados'); return render();
+    }
     if (t.dataset.act === 'reqOk' || t.dataset.act === 'reqNo') {
       const row = t.closest('[data-rid]'), ok = t.dataset.act === 'reqOk';
       await api('POST', `/api/admin/coin-requests/${row.dataset.rid}`, ok ? { action: 'approve', amount: Number(row.querySelector('[name=amt]').value) } : { action: 'reject' });
@@ -488,7 +571,7 @@ document.addEventListener('click', async (e) => {
       toast(`${r.report.reduce((s, x) => s + (x.matches || 0), 0)} partidos en ${r.report.length} torneos` + (errs.length ? ` (${errs.length} con error)` : ''), !!errs.length);
       return render();
     }
-    if (t.dataset.act === 'addComp') { const name = document.getElementById('newComp').value.trim(); if (!name) return; await api('POST', '/api/admin/competitions', { name }); toast('Torneo creado'); return render(); }
+    if (t.dataset.act === 'addComp') { const name = document.getElementById('newComp').value.trim(); if (!name) return; await api('POST', '/api/admin/competitions', { name, kind: document.getElementById('newKind').value }); toast('Torneo creado'); return render(); }
     if (t.dataset.act === 'addMatch') {
       const v = (id) => document.getElementById(id).value;
       await api('POST', '/api/admin/matches', { comp_id: v('mComp'), home: v('mHome'), away: v('mAway'), round: v('mRound'), kickoff: new Date(v('mWhen')).toISOString() });
@@ -504,7 +587,7 @@ document.addEventListener('click', async (e) => {
 
 async function saveCard(card, btn) {
   const h = card.querySelector('[name=h]').value, a = card.querySelector('[name=a]').value;
-  const stake = parseInt(card.querySelector('[name=stake]').value, 10), pick = card.querySelector('.pick.on')?.dataset.pick;
+  const stake = parseInt(card.querySelector('[name=stake]')?.value, 10), pick = card.querySelector('.pick.on')?.dataset.pick;
   const body = {};
   if (h !== '' || a !== '') {
     if (h === '' || a === '') return toast('Completá los dos resultados', true);

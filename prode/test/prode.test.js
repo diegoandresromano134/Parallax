@@ -111,7 +111,7 @@ test('grupos: crear, unirse con código, y cada grupo es independiente', async (
 
 test('fichas: solo las carga el admin, a pedido', async () => {
   const play = (t, body) => call('PUT', `/api/matches/${mid0}/play?group=${gid}`, body, t);
-  const comp0 = (await call('POST', '/api/admin/competitions', { name: 'Tmp' }, ADM.token)).data.id;
+  const comp0 = (await call('POST', '/api/admin/competitions', { name: 'Tmp', kind: 'cup' }, ADM.token)).data.id;
   const mid0 = (await call('POST', '/api/admin/matches', { comp_id: comp0, home: 'A', away: 'B', kickoff: new Date(Date.now() + 864e5).toISOString() }, ADM.token)).data.id;
   assert.match((await play(A.token, { bet: { pick: 'L', stake: 50 } })).data.error, /alcanzan/); // sin fichas no se apuesta
   assert.equal((await call('PUT', `/api/matches/${mid0}/play?group=${gid}`, { prediction: { home: 1, away: 0 } }, A.token)).status, 200); // pero se pronostica
@@ -164,7 +164,7 @@ test('panel: clave de la suscripción y usuarios (solo admin)', async () => {
 });
 
 test('apuesta, resultado y liquidación por grupo', async () => {
-  comp = (await call('POST', '/api/admin/competitions', { name: 'Test' }, ADM.token)).data.id;
+  comp = (await call('POST', '/api/admin/competitions', { name: 'Test', kind: 'cup' }, ADM.token)).data.id;
   assert.equal((await call('POST', '/api/admin/competitions', { name: 'x' }, B.token)).status, 403);
   const future = new Date(Date.now() + 86400e3).toISOString();
   mid = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'Boca', away: 'River', kickoff: future, round: 'Fecha 1' }, ADM.token)).data.id;
@@ -253,3 +253,101 @@ test('avisos: suscripción, recordatorio antes del cierre y entrega', async () =
 });
 
 test.after(() => server.close());
+
+// ---------- premios: pozo por fecha (ligas) y campeonato (copas) ----------
+const { rankEntrants, splitPot, kindFor } = await import('../server/prizes.js');
+
+test('premios: desempate y reparto del pozo', () => {
+  const e = (user_id, pts, exact, err) => ({ user_id, pts, exact, err });
+  const r = rankEntrants([e(1, 5, 1, 4), e(2, 6, 0, 9), e(3, 5, 2, 7), e(4, 5, 1, 2)]);
+  assert.deepEqual(r.map((x) => x.user_id), [2, 3, 4, 1]); // puntos, luego exactos, luego menos error
+  assert.deepEqual([...splitPot(300, r)], [[2, 300]]);
+  const tie = rankEntrants([e(1, 4, 1, 3), e(2, 4, 1, 3), e(3, 2, 0, 1)]);
+  assert.deepEqual([...splitPot(301, tie)], [[1, 151], [2, 150]]); // empate: se reparte, el resto va al primero
+  assert.equal(kindFor('Copa Libertadores'), 'cup'); assert.equal(kindFor('Argentine Primera Division'), 'league');
+});
+
+test('ligas por fecha: inscripción, apuestas bloqueadas, ganador cobra el pozo', async () => {
+  const mk = async (n) => (await call('POST', '/api/register', acct(n, { code: G_CODE }))).data;
+  const G = (await call('POST', '/api/groups', { name: 'Liga amigos' }, A.token)).data.groups.at(-1); const g = G.id; G_CODE = G.code;
+  const P2 = await mk('Lucho'), P3 = await mk('Nico');
+  for (const u of [A, P2, P3]) await call('POST', '/api/admin/grant', { user_id: u.user.id, group_id: g, amount: 1000 }, ADM.token);
+  const lg = (await call('POST', '/api/admin/competitions', { name: 'Liga Test', kind: 'league' }, ADM.token)).data.id;
+  const t = (h) => new Date(Date.now() + h * 3600e3).toISOString();
+  const m1 = (await call('POST', '/api/admin/matches', { comp_id: lg, home: 'A', away: 'B', kickoff: t(24), round: 'Fecha 1' }, ADM.token)).data.id;
+  const m2 = (await call('POST', '/api/admin/matches', { comp_id: lg, home: 'C', away: 'D', kickoff: t(48), round: 'Fecha 1' }, ADM.token)).data.id;
+  const pred = (u, id, h, a) => call('PUT', `/api/matches/${id}/play?group=${g}`, { prediction: { home: h, away: a } }, u.token);
+  // en liga no se apuesta por partido
+  assert.match((await call('PUT', `/api/matches/${m1}/play?group=${g}`, { bet: { pick: 'L', stake: 50 } }, A.token)).data.error, /por fecha/);
+  // inscripción: cobra 100, se puede salir antes de que empiece, no inscribirse dos veces
+  const join = (u) => call('POST', `/api/groups/${g}/rounds/join`, { comp_id: lg, round: 'Fecha 1' }, u.token);
+  assert.equal((await join(A)).status, 200); assert.equal((await join(A)).status, 400);
+  assert.equal((await call('GET', '/api/me', null, A.token)).data.groups.find((x) => x.id === g).coins, 900);
+  await call('POST', `/api/groups/${g}/rounds/leave`, { comp_id: lg, round: 'Fecha 1' }, A.token);
+  assert.equal((await call('GET', '/api/me', null, A.token)).data.groups.find((x) => x.id === g).coins, 1000); // devolvió la inscripción
+  for (const u of [A, P2, P3]) await join(u);
+  const pots = (await call('GET', `/api/groups/${g}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === lg);
+  assert.equal(pots.pot, 300); assert.equal(pots.players, 3); assert.equal(pots.joined, true); assert.equal(pots.can_join, true);
+  // pronósticos: A acierta todo exacto; Lucho acierta ganadores; Nico nada
+  await pred(A, m1, 2, 0); await pred(A, m2, 1, 1);
+  await pred(P2, m1, 1, 0); await pred(P2, m2, 0, 2);
+  await pred(P3, m1, 0, 3); await pred(P3, m2, 3, 0);
+  // se liquida el primer partido: la fecha sigue abierta, no se paga nada todavía
+  await call('POST', `/api/admin/matches/${m1}/result`, { home: 2, away: 0 }, ADM.token);
+  assert.equal((await call('GET', '/api/me', null, A.token)).data.groups.find((x) => x.id === g).coins, 900);
+  assert.equal((await call('POST', `/api/groups/${g}/rounds/leave`, { comp_id: lg, round: 'Fecha 1' }, P2.token)).status, 400); // ya empezó
+  // termina el último: se reparte
+  await call('POST', `/api/admin/matches/${m2}/result`, { home: 1, away: 1 }, ADM.token);
+  const coins = async (u) => (await call('GET', '/api/me', null, u.token)).data.groups.find((x) => x.id === g).coins;
+  assert.equal(await coins(A), 900 + 300); assert.equal(await coins(P2), 900); assert.equal(await coins(P3), 900);
+  const done = (await call('GET', `/api/groups/${g}/pots`, null, A.token)).data.rounds.find((r) => r.comp_id === lg);
+  assert.equal(done.settled, true); assert.equal(done.board[0].nick, 'DiegoR'); assert.equal(done.board[0].payout, 300);
+  // idempotente: cerrar a mano de nuevo no paga otra vez
+  await call('POST', '/api/admin/rounds/close', { group_id: g, comp_id: lg, round: 'Fecha 1' }, ADM.token);
+  assert.equal(await coins(A), 1200);
+  // el ranking muestra el neto de la fecha
+  const rk = (await call('GET', `/api/groups/${g}/ranking?comp=${lg}&round=Fecha%201`, null, A.token)).data.players;
+  assert.equal(rk.find((p) => p.nick === 'DiegoR').net, 200); assert.equal(rk.find((p) => p.nick === 'Lucho').net, -100);
+  // inscripción cerrada para fechas que ya empezaron
+  const m3 = (await call('POST', '/api/admin/matches', { comp_id: lg, home: 'E', away: 'F', kickoff: t(-1), round: 'Fecha 0' }, ADM.token)).data.id;
+  assert.equal((await call('POST', `/api/groups/${g}/rounds/join`, { comp_id: lg, round: 'Fecha 0' }, A.token)).status, 400);
+  assert.ok(m3);
+});
+let G_CODE;
+
+test('copas: apuesta por partido y pozo del campeonato por puntos acumulados', async () => {
+  const g = (await call('GET', '/api/me', null, A.token)).data.groups.find((x) => x.name === 'Liga amigos').id;
+  const cup = (await call('POST', '/api/admin/competitions', { name: 'Copa Libertadores Test' }, ADM.token)).data.id;
+  const adm = (await call('GET', '/api/admin/overview', null, ADM.token)).data.competitions.find((c) => c.id === cup);
+  assert.equal(adm.kind, 'cup'); assert.equal(adm.champ_fee, 300); // se detecta sola
+  const users = [A, (await call('POST', '/api/login', { email: 'lucho@mail.com', password: 'clave1234' })).data];
+  const t = (h) => new Date(Date.now() + h * 3600e3).toISOString();
+  const m1 = (await call('POST', '/api/admin/matches', { comp_id: cup, home: 'P', away: 'F', kickoff: t(24) }, ADM.token)).data.id;
+  const m2 = (await call('POST', '/api/admin/matches', { comp_id: cup, home: 'R', away: 'B', kickoff: t(48) }, ADM.token)).data.id;
+  const [a, l] = users;
+  // apuesta por partido: sigue funcionando en copas
+  assert.equal((await call('PUT', `/api/matches/${m1}/play?group=${g}`, { prediction: { home: 1, away: 0 }, bet: { pick: 'L', stake: 100 } }, a.token)).status, 200);
+  await call('PUT', `/api/matches/${m1}/play?group=${g}`, { prediction: { home: 0, away: 1 }, bet: { pick: 'V', stake: 100 } }, l.token);
+  // inscripción al campeonato
+  const before = async (u) => (await call('GET', '/api/me', null, u.token)).data.groups.find((x) => x.id === g).coins;
+  const [ca, cl] = [await before(a), await before(l)];
+  assert.equal((await call('POST', `/api/groups/${g}/champs/${cup}/join`, null, a.token)).status, 200);
+  assert.equal((await call('POST', `/api/groups/${g}/champs/${cup}/join`, null, a.token)).status, 400);
+  await call('POST', `/api/groups/${g}/champs/${cup}/join`, null, l.token);
+  await call('PUT', `/api/matches/${m2}/play?group=${g}`, { prediction: { home: 2, away: 2 } }, a.token);
+  await call('PUT', `/api/matches/${m2}/play?group=${g}`, { prediction: { home: 1, away: 0 } }, l.token);
+  await call('POST', `/api/admin/matches/${m1}/result`, { home: 1, away: 0 }, ADM.token); // el pozo del partido es para el local
+  await call('POST', `/api/admin/matches/${m2}/result`, { home: 2, away: 2 }, ADM.token);
+  assert.equal(await before(a), ca - 300 + 200); // inscripción 300, pozo del partido: 200 para quien acertó
+  const pot = (await call('GET', `/api/groups/${g}/pots`, null, a.token)).data.champs.find((c) => c.comp_id === cup);
+  assert.equal(pot.pot, 600); assert.equal(pot.board[0].nick, 'DiegoR'); assert.equal(pot.joined, true);
+  // el admin cierra el campeonato: gana quien acumuló más puntos (Diego: 3+3=6 contra 0+0)
+  assert.equal((await call('POST', `/api/admin/competitions/${cup}/close`, null, a.token)).status, 403);
+  await call('POST', `/api/admin/competitions/${cup}/close`, null, ADM.token);
+  assert.equal(await before(a), ca - 300 + 200 + 600);
+  assert.equal(await before(l), cl - 300);
+  assert.equal((await call('POST', `/api/groups/${g}/champs/${cup}/join`, null, l.token)).status, 400); // cerrado
+  assert.equal(await before(a), ca - 300 + 200 + 600); // cerrar de nuevo no paga dos veces
+  await call('POST', `/api/admin/competitions/${cup}/close`, null, ADM.token);
+  assert.equal(await before(a), ca - 300 + 200 + 600);
+});

@@ -10,6 +10,7 @@ import { discover, syncFixtures, refreshResults, startScheduler } from './sync.j
 import { seedDemo } from './demo.js';
 import { validateAccount, validPassword, PASSWORD_MSG, validAvatar, MIN_AGE } from './validate.js';
 import { standingsFor } from './standings.js';
+import { kindFor, defaultFees, roundBoard, champBoard, settleRound, settleChampionship, splitPot } from './prizes.js';
 import { publicKey, pull, flush, startNotifier, enqueueForUser } from './push.js';
 import { apiKey, FREE_KEY, testSource } from './providers/thesportsdb.js';
 import { getSetting, setSetting } from './db.js';
@@ -135,7 +136,7 @@ function listMatches(user, gid, q) {
   if (q.get('comp')) { where.push('m.comp_id=?'); args.push(Number(q.get('comp'))); }
   where.push(results ? "m.status IN ('finished','cancelled')" : "m.status NOT IN ('finished','cancelled')");
   if (!results) { where.push('m.kickoff > ?'); args.push(new Date(Date.now() - 4 * 3600e3).toISOString()); }
-  const rows = db.prepare(`SELECT m.*, c.name AS comp_name,
+  const rows = db.prepare(`SELECT m.*, c.name AS comp_name, c.kind AS comp_kind,
       p.home AS p_home, p.away AS p_away, p.points AS p_points,
       b.pick AS b_pick, b.stake AS b_stake, b.payout AS b_payout,
       (SELECT COUNT(*) FROM comments WHERE match_id=m.id AND group_id=?) AS n_comments
@@ -148,7 +149,7 @@ function listMatches(user, gid, q) {
   const pools = db.prepare(`SELECT match_id, pick, SUM(stake) AS total, COUNT(*) AS n FROM bets
     WHERE group_id=? AND match_id IN (${rows.map(() => '?').join(',')}) GROUP BY match_id, pick`).all(gid, ...rows.map((r) => r.id));
   return rows.map((m) => ({
-    id: m.id, comp_id: m.comp_id, comp: m.comp_name, round: m.round, home: m.home, away: m.away,
+    id: m.id, comp_id: m.comp_id, comp: m.comp_name, kind: m.comp_kind, round: m.round, home: m.home, away: m.away,
     home_badge: m.home_badge, away_badge: m.away_badge, kickoff: m.kickoff, status: m.status,
     home_goals: m.home_goals, away_goals: m.away_goals, locked: isLocked(m), comments: m.n_comments,
     pool: Object.fromEntries(['L', 'E', 'V'].map((k) => {
@@ -176,6 +177,10 @@ function play(user, gid, matchId, body) {
         db.prepare(`INSERT INTO predictions(user_id, group_id, match_id, home, away) VALUES (?,?,?,?,?)
           ON CONFLICT(user_id, group_id, match_id) DO UPDATE SET home=excluded.home, away=excluded.away`).run(user.id, gid, m.id, home, away);
       }
+    }
+    if (body.bet) {
+      const kind = db.prepare('SELECT kind FROM competitions WHERE id=?').get(m.comp_id).kind;
+      if (kind === 'league') throw bad('En las ligas se juega por fecha: pronosticá los resultados y anotate al pozo de la fecha.');
     }
     if (body.bet !== undefined) {
       const old = db.prepare('SELECT stake FROM bets WHERE user_id=? AND group_id=? AND match_id=?').get(user.id, gid, m.id);
@@ -205,7 +210,11 @@ function ranking(gid, comp, round) {
       (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id=p.match_id
         WHERE p.user_id=u.id AND p.group_id=?1 AND p.points=3 AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)) AS exact,
       COALESCE((SELECT SUM(b.payout - b.stake) FROM bets b JOIN matches m ON m.id=b.match_id
-        WHERE b.user_id=u.id AND b.group_id=?1 AND b.payout IS NOT NULL AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0) AS net
+        WHERE b.user_id=u.id AND b.group_id=?1 AND b.payout IS NOT NULL AND (?2 IS NULL OR m.comp_id=?2) AND (?3 IS NULL OR m.round=?3)), 0)
+      + COALESCE((SELECT SUM(re.payout - re.fee) FROM round_entries re WHERE re.user_id=u.id AND re.group_id=?1 AND re.payout IS NOT NULL
+        AND (?2 IS NULL OR re.comp_id=?2) AND (?3 IS NULL OR re.round=?3)), 0)
+      + COALESCE((SELECT SUM(ce.payout - ce.fee) FROM champ_entries ce WHERE ce.user_id=u.id AND ce.group_id=?1 AND ce.payout IS NOT NULL
+        AND (?2 IS NULL OR ce.comp_id=?2) AND ?3 IS NULL), 0) AS net
     FROM memberships mb JOIN users u ON u.id=mb.user_id WHERE mb.group_id=?1`).all(gid, comp, round);
   return players;
 }
@@ -330,6 +339,90 @@ route('GET', '/api/groups/:gid/coin-requests', ({ user, params }) => {
   return db.prepare(`SELECT id, amount, note, status, granted, created_at FROM coin_requests
     WHERE user_id=? AND group_id=? ORDER BY id DESC LIMIT 10`).all(user.id, Number(params.gid));
 });
+// ---------- premios: pozo por fecha (ligas) y del campeonato (copas) ----------
+const now = () => new Date().toISOString();
+function roundInfo(gid, userId, comp, round) {
+  const ms = db.prepare('SELECT status, kickoff FROM matches WHERE comp_id=? AND round=?').all(comp.id, round);
+  const first = ms.reduce((a, m) => (m.kickoff < a ? m.kickoff : a), ms[0].kickoff);
+  const entries = db.prepare(`SELECT e.user_id, e.fee, e.payout, u.nick, u.avatar, u.color FROM round_entries e JOIN users u ON u.id=e.user_id
+    WHERE e.group_id=? AND e.comp_id=? AND e.round=?`).all(gid, comp.id, round);
+  const settled = !!db.prepare('SELECT 1 FROM round_settled WHERE group_id=? AND comp_id=? AND round=?').get(gid, comp.id, round);
+  const nickOf = new Map(entries.map((e) => [e.user_id, e]));
+  const board = roundBoard(gid, comp.id, round).map((b) => ({ ...b, nick: nickOf.get(b.user_id).nick, avatar: nickOf.get(b.user_id).avatar, color: nickOf.get(b.user_id).color, payout: nickOf.get(b.user_id).payout }));
+  return {
+    comp_id: comp.id, comp: comp.name, round, fee: comp.entry_fee, first_kickoff: first,
+    can_join: !settled && first > now() && ms.every((m) => m.status === 'scheduled'), settled,
+    matches: ms.length, finished: ms.filter((m) => m.status === 'finished').length,
+    pot: entries.reduce((s, e) => s + e.fee, 0), players: entries.length, joined: entries.some((e) => e.user_id === userId), board,
+  };
+}
+function champInfo(gid, userId, comp) {
+  const entries = db.prepare('SELECT e.user_id, e.fee, e.payout FROM champ_entries e WHERE e.group_id=? AND e.comp_id=?').all(gid, comp.id);
+  const users = new Map(db.prepare('SELECT id, nick, avatar, color FROM users').all().map((u) => [u.id, u]));
+  const left = db.prepare("SELECT COUNT(*) AS n FROM matches WHERE comp_id=? AND status NOT IN ('finished','cancelled')").get(comp.id).n;
+  return {
+    comp_id: comp.id, comp: comp.name, fee: comp.champ_fee, open: !!comp.champ_open && !comp.closed_at, closed: !!comp.closed_at, pending_matches: left,
+    pot: entries.reduce((s, e) => s + e.fee, 0), players: entries.length, joined: entries.some((e) => e.user_id === userId),
+    board: champBoard(gid, comp.id).map((b) => ({ ...b, nick: users.get(b.user_id).nick, avatar: users.get(b.user_id).avatar, color: users.get(b.user_id).color, payout: entries.find((e) => e.user_id === b.user_id)?.payout ?? null })),
+  };
+}
+route('GET', '/api/groups/:gid/pots', ({ user, params }) => {
+  const gid = Number(params.gid); member(user, gid);
+  const comps = db.prepare('SELECT * FROM competitions WHERE enabled=1').all();
+  const since = new Date(Date.now() - 21 * 864e5).toISOString(), until = new Date(Date.now() + 21 * 864e5).toISOString();
+  const rounds = [], champs = [];
+  for (const c of comps) {
+    if (c.kind === 'league' && c.entry_fee > 0) {
+      const rs = db.prepare(`SELECT round, MIN(kickoff) AS first FROM matches WHERE comp_id=? AND round IS NOT NULL GROUP BY round
+        HAVING first > ? AND first < ? ORDER BY first`).all(c.id, since, until);
+      for (const r of rs) rounds.push(roundInfo(gid, user.id, c, r.round));
+    } else if (c.champ_fee > 0 && db.prepare('SELECT 1 FROM matches WHERE comp_id=?').get(c.id)) champs.push(champInfo(gid, user.id, c));
+  }
+  return { rounds, champs };
+});
+route('POST', '/api/groups/:gid/rounds/join', ({ user, params, body }) => {
+  const gid = Number(params.gid); member(user, gid);
+  return tx(() => {
+    const comp = db.prepare("SELECT * FROM competitions WHERE id=? AND enabled=1 AND kind='league'").get(Number(body.comp_id));
+    if (!comp || comp.entry_fee <= 0) throw bad('Ese torneo no tiene pozo por fecha');
+    const info = db.prepare('SELECT COUNT(*) AS n FROM matches WHERE comp_id=? AND round=?').get(comp.id, String(body.round));
+    if (!info.n) throw bad('No existe esa fecha');
+    const r = roundInfo(gid, user.id, comp, String(body.round));
+    if (r.joined) throw bad('Ya estás anotado en esta fecha');
+    if (!r.can_join) throw bad('La inscripción cerró: la fecha ya empezó');
+    const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
+    if (coins < comp.entry_fee) throw bad(`Necesitás ${comp.entry_fee} fichas para anotarte. Pedile fichas al admin.`);
+    db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(comp.entry_fee, user.id, gid);
+    db.prepare('INSERT INTO round_entries(group_id, comp_id, round, user_id, fee) VALUES (?,?,?,?,?)').run(gid, comp.id, String(body.round), user.id, comp.entry_fee);
+    return { ok: true };
+  });
+});
+route('POST', '/api/groups/:gid/rounds/leave', ({ user, params, body }) => {
+  const gid = Number(params.gid); member(user, gid);
+  return tx(() => {
+    const comp = db.prepare('SELECT * FROM competitions WHERE id=?').get(Number(body.comp_id));
+    const e = comp && db.prepare('SELECT * FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').get(gid, comp.id, String(body.round), user.id);
+    if (!e) throw bad('No estabas anotado');
+    if (!roundInfo(gid, user.id, comp, String(body.round)).can_join) throw bad('La fecha ya empezó: no se puede salir');
+    db.prepare('DELETE FROM round_entries WHERE group_id=? AND comp_id=? AND round=? AND user_id=?').run(gid, comp.id, e.round, user.id);
+    db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(e.fee, user.id, gid);
+    return { ok: true };
+  });
+});
+route('POST', '/api/groups/:gid/champs/:cid/join', ({ user, params }) => {
+  const gid = Number(params.gid); member(user, gid);
+  return tx(() => {
+    const comp = db.prepare('SELECT * FROM competitions WHERE id=? AND enabled=1').get(Number(params.cid));
+    if (!comp || comp.champ_fee <= 0) throw bad('Ese torneo no tiene pozo de campeonato');
+    if (!comp.champ_open || comp.closed_at) throw bad('La inscripción al campeonato está cerrada');
+    if (db.prepare('SELECT 1 FROM champ_entries WHERE group_id=? AND comp_id=? AND user_id=?').get(gid, comp.id, user.id)) throw bad('Ya estás anotado en el campeonato');
+    const coins = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(user.id, gid).coins;
+    if (coins < comp.champ_fee) throw bad(`Necesitás ${comp.champ_fee} fichas para anotarte. Pedile fichas al admin.`);
+    db.prepare('UPDATE memberships SET coins=coins-? WHERE user_id=? AND group_id=?').run(comp.champ_fee, user.id, gid);
+    db.prepare('INSERT INTO champ_entries(group_id, comp_id, user_id, fee, joined_at) VALUES (?,?,?,?,?)').run(gid, comp.id, user.id, comp.champ_fee, now());
+    return { ok: true };
+  });
+});
 route('GET', '/api/groups/:gid/ranking', ({ user, params, url }) => {
   member(user, params.gid);
   const comp = url.searchParams.get('comp') ? Number(url.searchParams.get('comp')) : null;
@@ -339,7 +432,7 @@ route('GET', '/api/groups/:gid/ranking', ({ user, params, url }) => {
 
 // torneos, partidos y juego
 route('GET', '/api/competitions', () => {
-  const comps = db.prepare(`SELECT c.id, c.name, c.country FROM competitions c
+  const comps = db.prepare(`SELECT c.id, c.name, c.country, c.kind, c.entry_fee, c.champ_fee FROM competitions c
     WHERE c.enabled=1 AND EXISTS (SELECT 1 FROM matches WHERE comp_id=c.id) ORDER BY c.country DESC, c.name`).all();
   const rounds = db.prepare(`SELECT comp_id, round, MIN(kickoff) AS first FROM matches WHERE round IS NOT NULL
     GROUP BY comp_id, round ORDER BY first`).all();
@@ -484,13 +577,39 @@ route('POST', '/api/admin/sync', async () => {
   return { found, report, checked };
 }, { admin: true });
 route('PATCH', '/api/admin/competitions/:id', ({ params, body }) => {
-  db.prepare('UPDATE competitions SET enabled=? WHERE id=?').run(body.enabled ? 1 : 0, Number(params.id));
+  const id = Number(params.id), c = db.prepare('SELECT * FROM competitions WHERE id=?').get(id);
+  if (!c) throw new HttpError(404, 'Torneo inexistente');
+  const fee = (v, cur) => { if (v === undefined) return cur; const n = Number(v); if (!Number.isInteger(n) || n < 0 || n > 1_000_000) throw bad('Monto inválido'); return n; };
+  if (body.kind !== undefined && !['league', 'cup'].includes(body.kind)) throw bad('Tipo inválido');
+  db.prepare('UPDATE competitions SET enabled=?, kind=?, entry_fee=?, champ_fee=?, champ_open=? WHERE id=?').run(
+    body.enabled === undefined ? c.enabled : body.enabled ? 1 : 0, body.kind ?? c.kind, fee(body.entry_fee, c.entry_fee), fee(body.champ_fee, c.champ_fee),
+    body.champ_open === undefined ? c.champ_open : body.champ_open ? 1 : 0, id);
   return { ok: true };
+}, { admin: true });
+route('GET', '/api/admin/pots', () => {
+  const rounds = db.prepare(`SELECT e.group_id, g.name AS group_name, e.comp_id, c.name AS comp, e.round, COUNT(*) AS players, SUM(e.fee) AS pot,
+    (SELECT COUNT(*) FROM matches m WHERE m.comp_id=e.comp_id AND m.round=e.round AND m.status NOT IN ('finished','cancelled')) AS pending
+    FROM round_entries e JOIN groups g ON g.id=e.group_id JOIN competitions c ON c.id=e.comp_id
+    WHERE NOT EXISTS (SELECT 1 FROM round_settled s WHERE s.group_id=e.group_id AND s.comp_id=e.comp_id AND s.round=e.round)
+    GROUP BY e.group_id, e.comp_id, e.round ORDER BY c.name, e.round`).all();
+  const champs = db.prepare(`SELECT c.id AS comp_id, c.name AS comp, c.champ_open, COUNT(e.user_id) AS players, COALESCE(SUM(e.fee),0) AS pot, COUNT(DISTINCT e.group_id) AS groups,
+    (SELECT COUNT(*) FROM matches m WHERE m.comp_id=c.id AND m.status NOT IN ('finished','cancelled')) AS pending
+    FROM competitions c LEFT JOIN champ_entries e ON e.comp_id=c.id WHERE c.closed_at IS NULL AND c.champ_fee>0 AND c.enabled=1 GROUP BY c.id`).all();
+  return { rounds, champs };
+}, { admin: true });
+route('POST', '/api/admin/rounds/close', ({ body }) => {
+  const done = tx(() => settleRound(Number(body.group_id), Number(body.comp_id), String(body.round), true));
+  flush(); return { settled: done };
+}, { admin: true });
+route('POST', '/api/admin/competitions/:id/close', ({ params }) => {
+  const done = tx(() => settleChampionship(Number(params.id)));
+  flush(); return { settled: done };
 }, { admin: true });
 route('POST', '/api/admin/competitions', ({ body }) => {
   const name = String(body.name || '').trim();
   if (!name) throw bad('Falta el nombre');
-  return { id: Number(db.prepare('INSERT INTO competitions(name, country, enabled) VALUES (?,?,1)').run(name, 'Manual').lastInsertRowid) };
+  const kind = body.kind === 'cup' ? 'cup' : body.kind === 'league' ? 'league' : kindFor(name), fees = defaultFees(kind);
+  return { id: Number(db.prepare('INSERT INTO competitions(name, country, enabled, kind, entry_fee, champ_fee) VALUES (?,?,1,?,?,?)').run(name, 'Manual', kind, fees.entry_fee, fees.champ_fee).lastInsertRowid) };
 }, { admin: true });
 route('POST', '/api/admin/matches', ({ body }) => {
   const kickoff = new Date(body.kickoff);

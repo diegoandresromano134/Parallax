@@ -6,10 +6,10 @@ export function seedDemo() {
   if (db.prepare("SELECT 1 FROM competitions WHERE name LIKE '%(DEMO)'").get()) return;
   const teams = ['Boca Juniors', 'River Plate', 'Racing Club', 'Independiente', 'San Lorenzo', 'Estudiantes',
     'Vélez', 'Lanús', 'Talleres', 'Rosario Central', 'Newell\'s', 'Huracán'];
-  const mk = (name, country) =>
-    Number(db.prepare('INSERT INTO competitions(name,country,enabled) VALUES (?,?,1)').run(name, country).lastInsertRowid);
+  const mk = (name, country, kind = 'league', entry = 100, champ = 0) =>
+    Number(db.prepare('INSERT INTO competitions(name,country,enabled,kind,entry_fee,champ_fee) VALUES (?,?,1,?,?,?)').run(name, country, kind, entry, champ).lastInsertRowid);
   const lpf = mk('Liga Profesional (DEMO)', 'Argentina');
-  const lib = mk('Copa Libertadores (DEMO)', 'Sudamérica');
+  const lib = mk('Copa Libertadores (DEMO)', 'Sudamérica', 'cup', 0, 300);
   const now = Date.now(), H = 3600e3, D = 24 * H;
   tx(() => {
     const ins = db.prepare(`INSERT INTO matches(comp_id, round, home, away, kickoff, status, home_goals, away_goals)

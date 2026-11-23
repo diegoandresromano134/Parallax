@@ -78,10 +78,35 @@ CREATE TABLE IF NOT EXISTS coin_requests (
 CREATE TABLE IF NOT EXISTS coin_log (
   id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, group_id INTEGER NOT NULL,
   amount INTEGER NOT NULL, reason TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+-- Premios: pozo por fecha (ligas) y pozo del campeonato (copas). Todo es por grupo.
+CREATE TABLE IF NOT EXISTS round_entries (
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  comp_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  round TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  fee INTEGER NOT NULL, payout INTEGER, joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (group_id, comp_id, round, user_id));
+CREATE TABLE IF NOT EXISTS round_settled (
+  group_id INTEGER NOT NULL, comp_id INTEGER NOT NULL, round TEXT NOT NULL,
+  settled_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (group_id, comp_id, round));
+CREATE TABLE IF NOT EXISTS champ_entries (
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  comp_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  fee INTEGER NOT NULL, payout INTEGER, joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (group_id, comp_id, user_id));
 CREATE TABLE IF NOT EXISTS notified (
   user_id INTEGER NOT NULL, match_id INTEGER NOT NULL, kind TEXT NOT NULL,
   PRIMARY KEY (user_id, match_id, kind));
 `);
+
+// Migración: columnas nuevas de torneos (kind: league|cup; entry_fee: inscripción por fecha; champ_fee: pozo del campeonato)
+for (const [col, ddl] of [
+  ['kind', "TEXT NOT NULL DEFAULT 'league'"], ['entry_fee', 'INTEGER NOT NULL DEFAULT 100'],
+  ['champ_fee', 'INTEGER NOT NULL DEFAULT 0'], ['champ_open', 'INTEGER NOT NULL DEFAULT 1'], ['closed_at', 'TEXT'],
+]) {
+  if (!db.prepare('PRAGMA table_info(competitions)').all().some((c) => c.name === col)) db.exec(`ALTER TABLE competitions ADD COLUMN ${col} ${ddl}`);
+}
 
 export function tx(fn) {
   db.exec('BEGIN IMMEDIATE');

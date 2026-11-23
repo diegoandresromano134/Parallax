@@ -1,6 +1,7 @@
 import { db } from './db.js';
 import { predictionPoints, settleBets } from './scoring.js';
 import { enqueueForUser } from './push.js';
+import { settleRoundsFor } from './prizes.js';
 
 /**
  * Liquida un partido terminado o devuelve las apuestas si fue cancelado.
@@ -43,6 +44,7 @@ export function settleMatch(id) {
   } else return false;
 
   db.prepare('UPDATE matches SET settled=1 WHERE id=?').run(id);
+  settleRoundsFor(m.comp_id, m.round); // si era el último partido de la fecha, se reparte el pozo de la fecha
   for (const [uid, text] of notes) enqueueForUser(uid, 'Terminó el partido', text);
   return true;
 }
