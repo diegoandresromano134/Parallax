@@ -102,3 +102,12 @@ details.box summary { cursor: pointer; } details.box[open] summary { margin-bott
 .filebtn { text-align: center; cursor: pointer; display: block; }
 .auth .two label { margin-top: 12px; }
 .code { font-family: ui-monospace, monospace; font-size: 1.6rem; letter-spacing: 3px; color: var(--accent); }
+
+.coins { font: inherit; font-weight: 700; cursor: pointer; }
+.dot { position: absolute; top: -4px; right: -10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--bad); color: #fff; font: 700 .7rem/18px system-ui; font-style: normal; text-align: center; }
+nav.tabs button span { position: relative; display: block; width: fit-content; margin: 0 auto; }
+.notice { background: #f5c54218; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: .88rem; }
+.link { background: none; color: var(--accent); text-decoration: underline; padding: 0; font: inherit; }
+.req { border-bottom: 1px solid var(--line); padding: 10px 0; } .req:last-child { border: 0; }
+details.box summary { list-style: none; } details.box summary::after { content: '▾'; float: right; color: var(--mute); }
+details.box[open] summary::after { content: '▴'; }

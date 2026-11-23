@@ -9,7 +9,7 @@ const store = {
 const S = {
   token: store.get('token'), me: null, groups: [], gid: Number(store.get('gid')) || null, cfg: { min_age: 16, colors: ['#f5c542'] },
   tab: 'matches', authMode: 'login', scope: 'upcoming', comp: '', comps: [], matches: [], loading: false,
-  rank: { mode: 'coins', comp: '', round: '' }, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
+  rank: { mode: 'coins', comp: '', round: '' }, adminPending: 0, tableComp: '', plays: {}, threads: {}, notif: 'unknown', admin: null, members: [],
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -40,7 +40,7 @@ async function api(method, path, body) {
 const gq = () => `group=${S.gid}`;
 function endSession() { S.token = null; S.me = null; S.groups = []; store.set('token', null); render(); }
 function applyBundle(b) {
-  S.me = b.user; S.groups = b.groups;
+  S.me = b.user; S.groups = b.groups; S.adminPending = b.admin_pending || 0;
   if (!group()) S.gid = S.groups[0]?.id ?? null;
   store.set('gid', S.gid);
 }
@@ -96,12 +96,18 @@ function groupForms() {
 // ---------- estructura principal ----------
 function shell(inner) {
   const g = group();
-  document.documentElement.style.setProperty('--accent', g.color || S.cfg.colors[0]);
-  const tabs = [['matches', '⚽', 'Partidos'], ['ranking', '🏆', 'Ranking'], ['tables', '📊', 'Tablas'], ['group', '👥', 'Grupo'], ['profile', '👤', 'Perfil']];
-  $app.innerHTML = `<header class="top"><div class="gsel">${S.groups.length > 1 ? `<select id="groupSel" aria-label="Grupo">${S.groups.map((x) => `<option value="${x.id}" ${x.id === S.gid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<h1>${esc(g.name)}</h1>`}</div>
-    <div class="coins" title="Tus fichas en este grupo">🪙 ${g.coins.toLocaleString('es-AR')}</div></header>
-    <main>${inner}</main>
-    <nav class="tabs">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${i}</span>${l}</button>`).join('')}</nav>`;
+  document.documentElement.style.setProperty('--accent', g?.color || S.cfg.colors[0]);
+  let tabs = [['matches', '⚽', 'Partidos'], ['ranking', '🏆', 'Ranking'], ['tables', '📊', 'Tablas'], ['group', '👥', 'Grupo'], ['profile', '👤', 'Perfil']];
+  if (!g) tabs = [];
+  if (S.me.is_admin) tabs.push(['admin', '🛠️', 'Admin']);
+  if (!g) tabs.push(['profile', '👤', 'Perfil']);
+  const badge = (k) => (k === 'admin' && S.adminPending ? `<i class="dot">${S.adminPending}</i>` : '');
+  const head = g
+    ? `<div class="gsel">${S.groups.length > 1 ? `<select id="groupSel" aria-label="Grupo">${S.groups.map((x) => `<option value="${x.id}" ${x.id === S.gid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<h1>${esc(g.name)}</h1>`}</div>
+       <button class="coins" data-tab="group" title="Tus fichas en este grupo. Tocá para pedir más.">🪙 ${g.coins.toLocaleString('es-AR')}</button>`
+    : '<div class="gsel"><h1>🛠️ Panel de control</h1></div>';
+  $app.innerHTML = `<header class="top">${head}</header><main>${inner}</main>
+    <nav class="tabs">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${i}${badge(k)}</span>${l}</button>`).join('')}</nav>`;
 }
 
 // ---------- partidos ----------
@@ -144,10 +150,12 @@ function matchCard(m) {
 
 function renderMatches() {
   const chips = [['', 'Todos'], ...S.comps.map((c) => [String(c.id), c.name])];
-  let html = `<div class="seg"><button data-scope="upcoming" class="${S.scope === 'upcoming' ? 'on' : ''}">Próximos</button><button data-scope="results" class="${S.scope === 'results' ? 'on' : ''}">Resultados</button></div>
+  const g = group();
+  let html = g.coins < 10 ? `<div class="notice"><b>No tenés fichas para apostar.</b> Igual podés pronosticar resultados y sumar puntos. Para apostar, <button class="link" data-tab="group">pedile fichas al admin</button>.</div>` : '';
+  html += `<div class="seg"><button data-scope="upcoming" class="${S.scope === 'upcoming' ? 'on' : ''}">Próximos</button><button data-scope="results" class="${S.scope === 'results' ? 'on' : ''}">Resultados</button></div>
     <div class="chips">${chips.map(([id, n]) => `<button class="chip ${S.comp === id ? 'on' : ''}" data-comp="${id}">${esc(n)}</button>`).join('')}</div>`;
   if (S.loading && !S.matches.length) html += '<div class="empty">Cargando…</div>';
-  else if (!S.matches.length) html += `<div class="empty">${S.scope === 'upcoming' ? 'No hay partidos próximos.' : 'Todavía no hay resultados.'}<br><span class="help">${S.me.is_admin ? 'Entrá a Perfil → Administración y tocá “Actualizar fixture”.' : 'El administrador tiene que cargar los torneos.'}</span></div>`;
+  else if (!S.matches.length) html += `<div class="empty">${S.scope === 'upcoming' ? 'No hay partidos próximos.' : 'Todavía no hay resultados.'}<br><span class="help">${S.me.is_admin ? 'Entrá a Admin y tocá “Actualizar fixture”.' : 'El administrador tiene que cargar los torneos.'}</span></div>`;
   else {
     let last = '';
     for (const m of S.matches) {
@@ -206,7 +214,7 @@ async function renderRanking() {
     ${sorted.map((p, i) => `<tr class="${p.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][i] || i + 1}</td>
       <td><span class="who">${avatar(p, 28)}<span>${esc(p.nick)}${p.fav_team ? `<small>${esc(p.fav_team)}</small>` : ''}</span></span></td>
       <td>${byPts ? p.points : filtered ? `<span class="${p.net > 0 ? 'win' : p.net < 0 ? 'lose' : ''}">${sign(p.net)}</span>` : p.coins.toLocaleString('es-AR')}</td><td>${byPts ? p.exact : p.points}</td></tr>`).join('')}</tbody></table>
-    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : `Todos arrancan con ${S.cfg.start_coins || 1000} fichas. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate.`}</p>`);
+    <p class="help">${filtered ? 'Con un filtro se ve lo ganado o perdido en esa fecha o torneo. Elegí un torneo y una fecha para saber quién ganó la semana.' : 'Las fichas las carga el administrador a pedido. Puntos: 3 por resultado exacto, 1 por acertar ganador o empate.'}</p>`);
 }
 
 // ---------- tablas ----------
@@ -230,14 +238,21 @@ async function renderGroup() {
   shell('<div class="empty">Cargando…</div>');
   const members = await api('GET', `/api/groups/${g.id}/members`);
   const share = `${location.origin}/?codigo=${g.code}`;
-  shell(`<div class="box"><h3>Invitá a tus amigos</h3><div class="code">${esc(g.code)}</div>
+  const reqs = await api('GET', `/api/groups/${g.id}/coin-requests`);
+  const st = { pending: '⏳ Esperando al admin', approved: '✅ Aprobado', rejected: '❌ No aprobado' };
+  shell(`<div class="box"><h3>Mis fichas: 🪙 ${g.coins.toLocaleString('es-AR')}</h3>
+      <p class="help">Las fichas las carga solo el administrador, a pedido. Decile cuántas querés y se las carga cuando pueda.</p>
+      <form id="reqForm"><div class="inline two"><input class="field" name="amount" type="number" inputmode="numeric" min="10" placeholder="¿Cuántas fichas?"><button class="primary nomargin" type="submit">Pedir fichas</button></div>
+      <input class="field" name="note" maxlength="200" placeholder="Mensaje para el admin (opcional)" style="margin-top:8px"></form>
+      ${reqs.length ? `<div style="margin-top:10px">${reqs.map((r) => `<div class="row"><div>${r.amount.toLocaleString('es-AR')} fichas<small>${st[r.status]}${r.status === 'approved' && r.granted !== r.amount ? ` · te cargaron ${r.granted}` : ''}</small></div><small>${fmtAgo(r.created_at)}</small></div>`).join('')}</div>` : ''}</div>
+    <div class="box"><h3>Invitá a tus amigos</h3><div class="code">${esc(g.code)}</div>
       <p class="help">Pasales este código (o el link). Lo ponen al crear su cuenta o en “Unirme con un código”.</p>
       <div class="inline two"><button class="ghost" data-copy="${esc(g.code)}">Copiar código</button><button class="ghost" data-share="${esc(share)}" data-name="${esc(g.name)}">Compartir link</button></div></div>
     <div class="box"><h3>Integrantes (${members.length})</h3>${members.map((m) => `<div class="row"><div class="who">${avatar(m, 34)}<span>${esc(m.nick)}${m.is_owner ? ' ⭐' : ''}<small>${m.fav_team ? esc(m.fav_team) + ' · ' : ''}${m.coins} fichas</small></span></div>
-      ${g.is_owner ? `<div><button class="ghost" data-coins="${m.id}" data-n="${esc(m.nick)}">± fichas</button> ${m.id !== S.me.id ? `<button class="ghost" data-temp="${m.id}" data-n="${esc(m.nick)}">Clave</button>` : ''}</div>` : ''}</div>`).join('')}</div>
+      ${g.is_owner && m.id !== S.me.id ? `<div><button class="ghost" data-temp="${m.id}" data-n="${esc(m.nick)}">Clave</button></div>` : ''}</div>`).join('')}</div>
     ${g.is_owner ? `<div class="box"><h3>Ajustes del grupo</h3><input class="field" id="gName" value="${esc(g.name)}" maxlength="30">${swatches('gColor', g.color)}
       <button class="primary" data-act="saveGroup">Guardar nombre y color</button><button class="ghost block" style="margin-top:8px" data-act="newCode">Generar un código nuevo</button>
-      <p class="help">“Clave” sirve si alguien olvidó su contraseña: le ponés una temporal y se la pasás.</p></div>` : `<button class="ghost block" data-act="leave">Salir de este grupo</button>`}
+      <p class="help">Como creador del grupo podés cambiar el nombre y color, y poner una “Clave” temporal si alguien olvidó la suya: le ponés una temporal y se la pasás.</p></div>` : `<button class="ghost block" data-act="leave">Salir de este grupo</button>`}
     <details class="box"><summary><b>Unirme a otro grupo o crear uno</b></summary>${groupForms()}</details>`);
 }
 
@@ -276,32 +291,50 @@ async function renderProfile() {
     <div class="box"><h3>Avisos en el celular: ${nl}</h3><p class="help">${nh}</p>${canPush ? `<button class="primary" data-act="notif">${S.notif === 'on' ? 'Desactivar avisos' : 'Activar avisos'}</button>` : ''}</div>
     <form class="box" id="passForm"><h3>Cambiar contraseña</h3>${field('Contraseña actual', 'current', 'password', 'autocomplete=current-password')}${field('Contraseña nueva', 'password', 'password', 'autocomplete=new-password')}
       <div class="err" id="wErr"></div><button class="primary" type="submit">Cambiar contraseña</button></form>
-    ${u.is_admin ? '<div id="adminBox" class="box"><h3>Administración</h3><div class="help">Cargando…</div></div>' : ''}
     <button class="ghost block" data-act="logout">Cerrar sesión</button>`);
-  if (u.is_admin) paintAdmin();
 }
 
-async function paintAdmin() {
-  const ov = await api('GET', '/api/admin/overview'); const comps = ov.competitions;
-  const open = (await api('GET', `/api/matches?${gq()}&scope=upcoming`)).filter((m) => m.locked);
-  const box = document.getElementById('adminBox'); if (!box) return;
-  box.innerHTML = `<h3>Administración</h3><p class="help">Solo la ves vos: manejás los torneos y el fixture para todos los grupos.</p>
-    <button class="primary" style="margin-top:0" data-act="sync">🔄 Actualizar fixture ahora</button>
-    <p class="help">Se actualiza solo (resultados cada 10 min, fixture cada 6 h). Este botón también busca torneos nuevos.</p>
-    <h3 style="margin-top:14px">Torneos</h3>${comps.length ? comps.map((c) => `<div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
-    <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><button class="ghost" data-act="addComp">Crear</button></div>
-    <h3 style="margin-top:14px">Cargar partido a mano</h3><div class="inline"><select class="field" id="mComp">${comps.filter((c) => c.enabled).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
-      <div class="inline two"><input class="field" id="mHome" placeholder="Local"><input class="field" id="mAway" placeholder="Visitante"></div><input class="field" id="mRound" placeholder="Fecha (ej: Fecha 3)"><input class="field" id="mWhen" type="datetime-local"><button class="ghost" data-act="addMatch">Agregar partido</button></div>
-    <h3 style="margin-top:14px">Cargar resultado a mano</h3><p class="help">Por si la fuente de datos tarda o falla.</p>
-    ${open.length ? open.map((m) => `<div class="row" data-mid="${m.id}"><div>${esc(m.home)} vs ${esc(m.away)}<small>${esc(m.comp)}</small></div><div><input class="mini" data-r="h" type="number" min="0" aria-label="Goles local"> <input class="mini" data-r="a" type="number" min="0" aria-label="Goles visitante"> <button class="ghost" data-act="result">OK</button></div></div>`).join('') : '<p class="help">No hay partidos esperando resultado.</p>'}`;
+async function renderAdmin() {
+  shell('<div class="empty">Cargando…</div>');
+  const [ov, reqs, users, ledger, pending] = await Promise.all([api('GET', '/api/admin/overview'), api('GET', '/api/admin/coin-requests'),
+    api('GET', '/api/admin/users'), api('GET', '/api/admin/ledger'), api('GET', '/api/admin/pending-matches')]);
+  S.adminPending = reqs.length; S.admin = ov;
+  const comps = ov.competitions, src = ov.source, g0 = ov.groups[0];
+  const sec = (title, body, open) => `<details class="box" ${open ? 'open' : ''}><summary><b>${title}</b></summary><div style="margin-top:10px">${body}</div></details>`;
+  shell(`<p class="help" style="margin:0 0 10px">Solo vos ves esta pantalla. Acá manejás las fichas, la suscripción de datos y los torneos de todos los grupos.</p>
+    ${sec(`Pedidos de fichas${reqs.length ? ` (${reqs.length})` : ''}`, reqs.length ? reqs.map((r) => `<div class="req" data-rid="${r.id}">
+        <div class="who"><b>${esc(r.nick)}</b><small>${esc(r.group_name)} · tiene ${r.coins} fichas · ${fmtAgo(r.created_at)}</small></div>
+        ${r.note ? `<p class="help">“${esc(r.note)}”</p>` : ''}
+        <div class="inline two" style="margin-top:6px"><input class="field" name="amt" type="number" min="1" value="${r.amount}" aria-label="Fichas a cargar"><div class="two"><button class="primary nomargin" data-act="reqOk">Cargar</button><button class="ghost" data-act="reqNo">Rechazar</button></div></div></div>`).join('') : '<p class="help">No hay pedidos pendientes.</p>', true)}
+    ${sec('Cargar fichas directo', ov.groups.length ? `<div class="inline"><select class="field" id="grGroup">${ov.groups.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>
+        <select class="field" id="grUser">${g0.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (${m.coins})</option>`).join('')}</select>
+        <input class="field" id="grAmt" type="number" inputmode="numeric" placeholder="Fichas (con - para restar)"><input class="field" id="grWhy" placeholder="Motivo (opcional)" maxlength="100">
+        <button class="primary nomargin" data-act="grant">Cargar fichas</button></div>` : '<p class="help">Todavía no hay grupos.</p>')}
+    ${sec('Fuente de datos (suscripción)', `<p class="help" style="margin-top:0">Estado: <b>${src.key_set ? `clave cargada ${src.hint} (${src.from})` : 'usando la clave gratuita, con límites'}</b></p>
+        <input class="field" id="keyInp" type="password" autocomplete="off" placeholder="${src.key_set ? 'Pegá una clave nueva para reemplazarla' : 'Pegá acá la clave de tu suscripción'}">
+        <div class="two" style="margin-top:8px"><button class="primary nomargin" data-act="saveKey">Guardar clave</button><button class="ghost" data-act="testKey">Probar conexión</button></div>
+        ${src.key_set ? '<button class="ghost block" data-act="rmKey">Volver a la clave gratuita</button>' : ''}<div class="help" id="keyMsg"></div>
+        <button class="primary" data-act="sync">🔄 Actualizar fixture ahora</button>
+        <p class="help">Se actualiza solo: resultados cada 10 min, fixture cada 6 h y torneos nuevos una vez por día.</p>`)}
+    ${sec('Torneos', `${comps.length ? comps.map((c) => `<div class="row"><div>${esc(c.name)}<small>${esc(c.country || '')} · ${c.matches} partidos</small></div><input class="switch" type="checkbox" data-comp-toggle="${c.id}" ${c.enabled ? 'checked' : ''} aria-label="Activar ${esc(c.name)}"></div>`).join('') : '<p class="help">Todavía no hay torneos. Tocá “Actualizar fixture”.</p>'}
+        <div class="inline two" style="margin-top:10px"><input class="field" id="newComp" placeholder="Torneo propio (ej: Mundial)"><button class="ghost" data-act="addComp">Crear</button></div>`)}
+    ${sec('Cargar partidos y resultados a mano', `<div class="inline"><select class="field" id="mComp">${comps.filter((c) => c.enabled).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+        <div class="inline two"><input class="field" id="mHome" placeholder="Local"><input class="field" id="mAway" placeholder="Visitante"></div><input class="field" id="mRound" placeholder="Fecha (ej: Fecha 3)"><input class="field" id="mWhen" type="datetime-local"><button class="ghost" data-act="addMatch">Agregar partido</button></div>
+        <h3 style="margin-top:14px">Esperando resultado</h3>${pending.length ? pending.map((m) => `<div class="row" data-mid="${m.id}"><div>${esc(m.home)} vs ${esc(m.away)}<small>${esc(m.comp)}</small></div><div><input class="mini" data-r="h" type="number" min="0" aria-label="Goles local"> <input class="mini" data-r="a" type="number" min="0" aria-label="Goles visitante"> <button class="ghost" data-act="result">OK</button></div></div>`).join('') : '<p class="help">No hay partidos esperando resultado.</p>'}`)}
+    ${sec(`Usuarios (${users.length})`, users.map((u) => `<div class="row"><div>${esc(u.nick)}${u.is_admin ? ' ⭐' : ''}<small>${esc(u.first_name)} ${esc(u.last_name)} · ${esc(u.email)}<br>${esc(u.groups || 'sin grupo')}</small></div>${u.is_admin ? '' : `<button class="ghost" data-upass="${u.id}" data-n="${esc(u.nick)}">Clave</button>`}</div>`).join(''))}
+    ${sec('Últimos movimientos de fichas', ledger.length ? ledger.map((l) => `<div class="row"><div>${esc(l.nick)} · ${esc(l.group_name)}<small>${esc(l.reason || '')} · ${fmtAgo(l.created_at)}</small></div><b class="${l.amount > 0 ? 'win' : 'lose'}">${l.amount > 0 ? '+' : ''}${l.amount}</b></div>`).join('') : '<p class="help">Todavía no cargaste fichas.</p>')}`);
 }
 
 // ---------- dispatcher ----------
 async function render() {
   if (!S.token) return renderAuth();
   if (!S.me) { try { applyBundle(await api('GET', '/api/me')); } catch { return renderAuth(); } }
-  if (!S.groups.length) return renderOnboarding();
+  if (!S.groups.length) {
+    if (!S.me.is_admin) return renderOnboarding();
+    if (S.tab !== 'profile') S.tab = 'admin'; // el admin no necesita grupo para manejar el panel
+  }
   try {
+    if (S.tab === 'admin' && S.me.is_admin) return await renderAdmin();
     if (S.tab === 'ranking') return await renderRanking();
     if (S.tab === 'tables') return await renderTables();
     if (S.tab === 'group') return await renderGroup();
@@ -333,6 +366,9 @@ document.addEventListener('submit', async (e) => {
     } else if (form.id === 'passForm') {
       try { await api('POST', '/api/me/password', f); form.reset(); toast('Contraseña cambiada'); document.getElementById('wErr').textContent = ''; }
       catch (x) { document.getElementById('wErr').textContent = x.message; }
+    } else if (form.id === 'reqForm') {
+      await api('POST', `/api/groups/${S.gid}/coin-requests`, { amount: Number(f.amount), note: f.note });
+      toast('Pedido enviado al admin'); render();
     } else if (form.classList.contains('msgform')) {
       const id = form.dataset.id; if (!f.body.trim()) return;
       await api('POST', `/api/matches/${id}/comments?${gq()}`, { body: f.body });
@@ -347,7 +383,10 @@ document.addEventListener('change', async (e) => {
   const t = e.target;
   try {
     if (t.id === 'groupSel') { S.gid = Number(t.value); store.set('gid', S.gid); S.matches = []; S.plays = {}; S.threads = {}; S.comp = ''; render(); }
-    else if (t.id === 'rkComp') { S.rank.comp = t.value; S.rank.round = ''; renderRanking(); }
+    else if (t.id === 'grGroup') {
+      const gr = S.admin.groups.find((x) => x.id === Number(t.value));
+      document.getElementById('grUser').innerHTML = gr.members.map((m) => `<option value="${m.id}">${esc(m.nick)} (${m.coins})</option>`).join('');
+    } else if (t.id === 'rkComp') { S.rank.comp = t.value; S.rank.round = ''; renderRanking(); }
     else if (t.id === 'rkRound') { S.rank.round = t.value; renderRanking(); }
     else if (t.id === 'photo' && t.files[0]) {
       const data = await resizePhoto(t.files[0]);
@@ -408,9 +447,31 @@ document.addEventListener('click', async (e) => {
       else { try { await navigator.clipboard.writeText(t.dataset.share); toast('Link copiado'); } catch { toast(t.dataset.share); } }
       return;
     }
-    if (t.dataset.coins) {
-      const n = parseInt(prompt(`Fichas a sumar (o restar con -) a ${t.dataset.n}:`, '100'), 10);
-      if (Number.isInteger(n)) { await api('POST', `/api/groups/${S.gid}/members/${t.dataset.coins}/coins`, { delta: n }); applyBundle(await api('GET', '/api/me')); render(); }
+    if (t.dataset.act === 'reqOk' || t.dataset.act === 'reqNo') {
+      const row = t.closest('[data-rid]'), ok = t.dataset.act === 'reqOk';
+      await api('POST', `/api/admin/coin-requests/${row.dataset.rid}`, ok ? { action: 'approve', amount: Number(row.querySelector('[name=amt]').value) } : { action: 'reject' });
+      toast(ok ? 'Fichas cargadas' : 'Pedido rechazado'); return render();
+    }
+    if (t.dataset.act === 'grant') {
+      const amount = parseInt(document.getElementById('grAmt').value, 10);
+      if (!Number.isInteger(amount) || !amount) throw new Error('Poné cuántas fichas');
+      await api('POST', '/api/admin/grant', { group_id: Number(document.getElementById('grGroup').value), user_id: Number(document.getElementById('grUser').value), amount, reason: document.getElementById('grWhy').value });
+      toast('Listo'); return render();
+    }
+    if (t.dataset.act === 'saveKey' || t.dataset.act === 'rmKey') {
+      const key = t.dataset.act === 'rmKey' ? '' : document.getElementById('keyInp').value.trim();
+      if (t.dataset.act === 'saveKey' && !key) throw new Error('Pegá primero la clave');
+      await api('POST', '/api/admin/settings', { thesportsdb_key: key }); toast(key ? 'Clave guardada' : 'Usando la clave gratuita'); return render();
+    }
+    if (t.dataset.act === 'testKey') {
+      const msg = document.getElementById('keyMsg'); msg.textContent = 'Probando…';
+      const r = await api('POST', '/api/admin/test-source');
+      msg.innerHTML = r.ok ? `<span class="win">Conectó.</span> ${esc(r.league)} ${esc(r.season)}: ${r.events} partidos. Plan: ${r.premium ? 'con clave de suscripción' : 'gratuito'}.` : `<span class="lose">No conectó:</span> ${esc(r.error)}`;
+      return;
+    }
+    if (t.dataset.upass) {
+      const p = prompt(`Clave temporal para ${t.dataset.n} (8 o más, con letras y números):`);
+      if (p) { await api('POST', `/api/admin/users/${t.dataset.upass}/password`, { password: p }); toast('Clave cambiada'); }
       return;
     }
     if (t.dataset.temp) {

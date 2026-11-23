@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 
 process.env.PRODE_DB = ':memory:';
 process.env.PRODE_NO_LISTEN = '1';
+process.env.PRODE_ADMIN_EMAIL = 'jefe@prode.com';
+process.env.PRODE_ADMIN_PASSWORD = 'jefe12345';
 
 const { outcome, predictionPoints, settleBets } = await import('../server/scoring.js');
 const { mapEvent, mapStatus } = await import('../server/providers/thesportsdb.js');
@@ -72,7 +74,7 @@ const call = async (method, path, body, token) => {
   return { status: res.status, data: await res.json().catch(() => null) };
 };
 const acct = (n, extra = {}) => ({ email: `${n}@mail.com`, password: 'clave1234', first_name: n, last_name: 'Prueba', nick: n, birth_date: '1990-05-10', accept: true, ...extra });
-let A, B, gid, mid, comp;
+let A, B, ADM, gid, mid, comp;
 
 test('registro: obligatorio, mayores de 16 y datos válidos', async () => {
   assert.equal((await call('GET', '/api/me')).status, 401);
@@ -81,9 +83,13 @@ test('registro: obligatorio, mayores de 16 y datos válidos', async () => {
   assert.match((await call('POST', '/api/register', acct('x1', { password: '123' }))).data.error, /contraseña/);
   assert.match((await call('POST', '/api/register', acct('x2', { accept: false }))).data.error, /confirmar/);
   assert.match((await call('POST', '/api/register', acct('x3', { code: 'NOEXISTE' }))).data.error, /grupo/);
+  ADM = (await call('POST', '/api/login', { email: 'jefe@prode.com', password: 'jefe12345' })).data;
+  assert.equal(ADM.user.is_admin, true);
   A = (await call('POST', '/api/register', acct('Diego'))).data;
-  assert.equal(A.user.is_admin, true); assert.equal(A.groups.length, 0);
+  assert.equal(A.user.is_admin, false); assert.equal(A.groups.length, 0); // el primero en registrarse NO es admin
   assert.match((await call('POST', '/api/register', acct('Otro', { email: 'DIEGO@mail.com' }))).data.error, /mail/);
+  assert.match((await call('POST', '/api/register', acct('Intruso', { email: 'JEFE@prode.com' }))).data.error, /mail/); // no se puede registrar el mail del admin
+  assert.match((await call('POST', '/api/register', acct('Administrador2'))).data.error, /apodo/);
   assert.match((await call('POST', '/api/register', acct('diego', { email: 'otro@mail.com' }))).data.error, /apodo/);
   assert.equal((await call('POST', '/api/login', { email: 'diego@mail.com', password: 'mala1234' })).status, 401);
   assert.equal((await call('POST', '/api/login', { email: 'DIEGO@mail.com', password: 'clave1234' })).status, 200);
@@ -92,7 +98,7 @@ test('registro: obligatorio, mayores de 16 y datos válidos', async () => {
 test('grupos: crear, unirse con código, y cada grupo es independiente', async () => {
   const g = (await call('POST', '/api/groups', { name: 'Los pibes', color: '#4cc9f0' }, A.token)).data;
   gid = g.groups[0].id; const code = g.groups[0].code;
-  assert.equal(g.groups[0].coins, 1000); assert.equal(g.groups[0].is_owner, true);
+  assert.equal(g.groups[0].coins, 0); assert.equal(g.groups[0].is_owner, true); // nadie arranca con fichas
   B = (await call('POST', '/api/register', acct('Marcos', { code: code.toLowerCase() }))).data;
   assert.equal(B.groups[0].name, 'Los pibes'); assert.equal(B.groups[0].is_owner, false);
   assert.equal((await call('PATCH', `/api/groups/${gid}`, { name: 'X' }, B.token)).status, 403);
@@ -103,11 +109,65 @@ test('grupos: crear, unirse con código, y cada grupo es independiente', async (
   assert.equal((await call('GET', `/api/groups/${gid}/ranking`, null, C.token)).status, 403);
 });
 
+test('fichas: solo las carga el admin, a pedido', async () => {
+  const play = (t, body) => call('PUT', `/api/matches/${mid0}/play?group=${gid}`, body, t);
+  const comp0 = (await call('POST', '/api/admin/competitions', { name: 'Tmp' }, ADM.token)).data.id;
+  const mid0 = (await call('POST', '/api/admin/matches', { comp_id: comp0, home: 'A', away: 'B', kickoff: new Date(Date.now() + 864e5).toISOString() }, ADM.token)).data.id;
+  assert.match((await play(A.token, { bet: { pick: 'L', stake: 50 } })).data.error, /alcanzan/); // sin fichas no se apuesta
+  assert.equal((await call('PUT', `/api/matches/${mid0}/play?group=${gid}`, { prediction: { home: 1, away: 0 } }, A.token)).status, 200); // pero se pronostica
+  // el creador del grupo y los jugadores no pueden cargar fichas ni tocar el panel
+  assert.equal((await call('POST', '/api/admin/grant', { user_id: A.user.id, group_id: gid, amount: 999 }, A.token)).status, 403);
+  assert.equal((await call('POST', `/api/groups/${gid}/members/${A.user.id}/coins`, { delta: 999 }, A.token)).status, 404);
+  assert.equal((await call('GET', '/api/admin/coin-requests', null, A.token)).status, 403);
+  assert.equal((await call('POST', '/api/admin/settings', { thesportsdb_key: 'x123' }, A.token)).status, 403);
+  // pedidos
+  assert.equal((await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 5 }, A.token)).status, 400);
+  assert.equal((await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 1000, note: 'Para el finde' }, A.token)).status, 200);
+  await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 300 }, B.token);
+  const pend = (await call('GET', '/api/admin/coin-requests', null, ADM.token)).data;
+  assert.equal(pend.length, 2); assert.equal(pend[0].nick, 'Diego'); assert.equal(pend[0].note, 'Para el finde');
+  assert.equal((await call('POST', `/api/admin/coin-requests/${pend[0].id}`, { action: 'approve' }, ADM.token)).status, 200); // aprueba lo pedido
+  assert.equal((await call('POST', `/api/admin/coin-requests/${pend[1].id}`, { action: 'approve', amount: 500 }, ADM.token)).status, 200); // ajusta el monto
+  assert.equal((await call('POST', `/api/admin/coin-requests/${pend[1].id}`, { action: 'approve' }, ADM.token)).status, 404); // no se aprueba dos veces
+  await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 777 }, B.token);
+  const r3 = (await call('GET', '/api/admin/coin-requests', null, ADM.token)).data;
+  await call('POST', `/api/admin/coin-requests/${r3[0].id}`, { action: 'reject' }, ADM.token);
+  const mine = (await call('GET', `/api/groups/${gid}/coin-requests`, null, B.token)).data;
+  assert.deepEqual(mine.map((r) => [r.status, r.granted]), [['rejected', null], ['approved', 500]]);
+  assert.equal((await call('GET', '/api/me', null, A.token)).data.groups[0].coins, 1000);
+  assert.equal((await call('GET', '/api/me', null, B.token)).data.groups[0].coins, 500);
+  // carga directa y movimientos
+  await call('POST', '/api/admin/grant', { user_id: B.user.id, group_id: gid, amount: 500 }, ADM.token);
+  assert.equal((await call('POST', '/api/admin/grant', { user_id: B.user.id, group_id: gid, amount: -5000 }, ADM.token)).status, 400);
+  const led = (await call('GET', '/api/admin/ledger', null, ADM.token)).data;
+  assert.deepEqual(led.map((l) => l.amount), [500, 500, 1000]);
+  // pedidos abiertos limitados a 3
+  for (let i = 0; i < 3; i++) await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 10 }, A.token);
+  assert.match((await call('POST', `/api/groups/${gid}/coin-requests`, { amount: 10 }, A.token)).data.error, /3 pedidos/);
+});
+
+test('panel: clave de la suscripción y usuarios (solo admin)', async () => {
+  let o = (await call('GET', '/api/admin/overview', null, ADM.token)).data;
+  assert.equal(o.source.key_set, false);
+  assert.ok(o.pending >= 3); assert.ok(o.groups.find((g) => g.id === gid).members.length === 2);
+  const s = (await call('POST', '/api/admin/settings', { thesportsdb_key: ' ABC12345wxyz ' }, ADM.token)).data;
+  assert.equal(s.key_set, true); assert.equal(s.hint, '••••wxyz'); assert.equal(JSON.stringify(s).includes('ABC123'), false); // nunca se devuelve la clave
+  assert.equal((await call('POST', '/api/admin/settings', { thesportsdb_key: 'mala clave!' }, ADM.token)).status, 400);
+  await call('POST', '/api/admin/settings', { thesportsdb_key: '' }, ADM.token);
+  assert.equal((await call('GET', '/api/admin/overview', null, ADM.token)).data.source.key_set, false);
+  const users = (await call('GET', '/api/admin/users', null, ADM.token)).data;
+  assert.ok(users.some((u) => u.email === 'diego@mail.com' && /Los pibes/.test(u.groups)));
+  assert.equal((await call('GET', '/api/admin/users', null, B.token)).status, 403);
+  // nadie puede cambiarle la clave al admin
+  assert.equal((await call('POST', `/api/groups/${gid}/members/${ADM.user.id}/password`, { password: 'hackeo1234' }, A.token)).status, 403);
+  assert.equal((await call('POST', '/api/login', { email: 'jefe@prode.com', password: 'jefe12345' })).status, 200);
+});
+
 test('apuesta, resultado y liquidación por grupo', async () => {
-  comp = (await call('POST', '/api/admin/competitions', { name: 'Test' }, A.token)).data.id;
+  comp = (await call('POST', '/api/admin/competitions', { name: 'Test' }, ADM.token)).data.id;
   assert.equal((await call('POST', '/api/admin/competitions', { name: 'x' }, B.token)).status, 403);
   const future = new Date(Date.now() + 86400e3).toISOString();
-  mid = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'Boca', away: 'River', kickoff: future, round: 'Fecha 1' }, A.token)).data.id;
+  mid = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'Boca', away: 'River', kickoff: future, round: 'Fecha 1' }, ADM.token)).data.id;
   const play = (t, body) => call('PUT', `/api/matches/${mid}/play?group=${gid}`, body, t);
   assert.equal((await play(A.token, { prediction: { home: 1, away: 0 }, bet: { pick: 'L', stake: 100 } })).data.coins, 900);
   await play(B.token, { prediction: { home: 0, away: 2 }, bet: { pick: 'V', stake: 300 } });
@@ -115,10 +175,11 @@ test('apuesta, resultado y liquidación por grupo', async () => {
   assert.equal((await play(A.token, { bet: { pick: 'L', stake: 5000 } })).status, 400);
   assert.equal((await call('GET', `/api/matches/${mid}/plays?group=${gid}`, null, A.token)).status, 409);
   const list = (await call('GET', `/api/matches?group=${gid}`, null, A.token)).data;
-  assert.equal(list[0].pool.L.total, 200); assert.equal(list[0].pool.V.total, 300);
+  const lm = list.find((m) => m.id === mid);
+  assert.equal(lm.pool.L.total, 200); assert.equal(lm.pool.V.total, 300);
 
-  await call('POST', `/api/admin/matches/${mid}/result`, { home: 1, away: 0 }, A.token);
-  await call('POST', `/api/admin/matches/${mid}/result`, { home: 1, away: 0 }, A.token); // idempotente
+  await call('POST', `/api/admin/matches/${mid}/result`, { home: 1, away: 0 }, ADM.token);
+  await call('POST', `/api/admin/matches/${mid}/result`, { home: 1, away: 0 }, ADM.token); // idempotente
   const r = (await call('GET', `/api/groups/${gid}/ranking`, null, A.token)).data.players;
   const diego = r.find((p) => p.nick === 'Diego'), marcos = r.find((p) => p.nick === 'Marcos');
   assert.equal(diego.coins, 800 + 500); assert.equal(diego.points, 3); assert.equal(diego.net, 300);
@@ -138,11 +199,12 @@ test('apuesta, resultado y liquidación por grupo', async () => {
 test('el pozo no se mezcla entre grupos', async () => {
   const g2 = (await call('POST', '/api/groups', { name: 'Trabajo' }, A.token)).data.groups.at(-1).id;
   const future = new Date(Date.now() + 3600e3 * 5).toISOString();
-  const m2 = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'X', away: 'Y', kickoff: future }, A.token)).data.id;
+  const m2 = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'X', away: 'Y', kickoff: future }, ADM.token)).data.id;
+  await call('POST', '/api/admin/grant', { user_id: A.user.id, group_id: g2, amount: 1000 }, ADM.token);
   await call('PUT', `/api/matches/${m2}/play?group=${g2}`, { bet: { pick: 'L', stake: 500 } }, A.token);
   const l1 = (await call('GET', `/api/matches?group=${gid}`, null, A.token)).data.find((m) => m.id === m2);
   assert.equal(l1.pool.L.total, 0);
-  await call('POST', `/api/admin/matches/${m2}/result`, { cancel: true }, A.token);
+  await call('POST', `/api/admin/matches/${m2}/result`, { cancel: true }, ADM.token);
   const groups = (await call('GET', '/api/me', null, A.token)).data.groups;
   assert.equal(groups.find((g) => g.id === g2).coins, 1000); // devolución
 });
@@ -181,7 +243,7 @@ test('avisos: suscripción, recordatorio antes del cierre y entrega', async () =
   assert.equal((await call('POST', '/api/push/subscribe', { endpoint: 'http://inseguro' }, A.token)).status, 400);
   await call('POST', '/api/push/subscribe', { endpoint: ep }, A.token);
   const soon = new Date(Date.now() + 45 * 60e3).toISOString();
-  const m3 = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'Lanús', away: 'Vélez', kickoff: soon }, A.token)).data.id;
+  const m3 = (await call('POST', '/api/admin/matches', { comp_id: comp, home: 'Lanús', away: 'Vélez', kickoff: soon }, ADM.token)).data.id;
   assert.ok(queueReminders() >= 1);
   assert.equal(queueReminders(), 0); // un solo aviso por partido
   const got = (await call('POST', '/api/push/pull', { endpoint: ep })).data.messages;

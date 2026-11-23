@@ -1,6 +1,7 @@
 // Reglas puras del juego (sin base de datos), fáciles de testear.
 
-export const START_COINS = Number(process.env.PRODE_START_COINS) || 1000;
+// Las fichas las carga solo el administrador, por pedido. Nadie arranca con fichas.
+export const START_COINS = Number(process.env.PRODE_START_COINS || 0);
 export const MIN_STAKE = 10;
 
 /** 'L' gana local, 'E' empate, 'V' gana visitante */

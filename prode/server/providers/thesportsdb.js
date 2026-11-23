@@ -1,9 +1,13 @@
 // Proveedor de fixtures: TheSportsDB (https://www.thesportsdb.com/documentation).
-// Funciona con la clave gratuita ("3"), pero el plan gratuito limita la cantidad
+// Funciona con la clave gratuita ("123"), pero el plan gratuito limita la cantidad
 // de partidos que devuelve por consulta. Con THESPORTSDB_KEY (plan pago, ~USD 9/mes
 // para una persona) trae temporadas completas.
 const BASE = 'https://www.thesportsdb.com/api/v1/json';
-const KEY = () => process.env.THESPORTSDB_KEY || '3';
+import { getSetting } from '../db.js';
+export const FREE_KEY = '123';
+// La clave de la suscripción se carga desde el panel de administración (o por variable de entorno).
+export const apiKey = () => getSetting('thesportsdb_key') || process.env.THESPORTSDB_KEY || FREE_KEY;
+const KEY = apiKey;
 
 // Torneos que se activan solos al descubrirlos; el admin puede cambiar el resto.
 export const DEFAULT_ENABLED =
@@ -92,4 +96,14 @@ export async function table(comp) {
     drawn: n(r.intDraw), lost: n(r.intLoss), gf: n(r.intGoalsFor), ga: n(r.intGoalsAgainst),
     gd: n(r.intGoalDifference), points: n(r.intPoints),
   }));
+}
+
+/** Prueba la clave: trae la Liga Profesional (id 4406) y cuenta los partidos de su temporada. */
+export async function testSource() {
+  const key = apiKey();
+  const league = (await get('lookupleague.php?id=4406')).leagues?.[0];
+  if (!league) throw new Error('La fuente respondió pero sin datos: revisá la clave');
+  const season = league.strCurrentSeason;
+  const ev = (await get(`eventsseason.php?id=4406&s=${encodeURIComponent(season)}`)).events || [];
+  return { premium: key !== FREE_KEY, league: league.strLeague, season, events: ev.length };
 }

@@ -10,7 +10,9 @@ import { discover, syncFixtures, refreshResults, startScheduler } from './sync.j
 import { seedDemo } from './demo.js';
 import { validateAccount, validPassword, PASSWORD_MSG, validAvatar, MIN_AGE } from './validate.js';
 import { standingsFor } from './standings.js';
-import { publicKey, pull, flush, startNotifier } from './push.js';
+import { publicKey, pull, flush, startNotifier, enqueueForUser } from './push.js';
+import { apiKey, FREE_KEY, testSource } from './providers/thesportsdb.js';
+import { getSetting, setSetting } from './db.js';
 
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT) || 3000;
@@ -31,11 +33,36 @@ const publicUser = (u) => ({
 });
 const userById = (id) => db.prepare('SELECT * FROM users WHERE id=?').get(id);
 
+// ---------- administrador único ----------
+// Hay UN solo admin: la cuenta de PRODE_ADMIN_EMAIL, creada por el servidor con PRODE_ADMIN_PASSWORD.
+// Nadie puede registrarse con ese mail ni volverse admin. Sin esas variables (solo para probar en la
+// compu) el primer usuario registrado queda como admin.
+const ADMIN_EMAIL = (process.env.PRODE_ADMIN_EMAIL || '').trim().toLowerCase();
+function bootstrapAdmin() {
+  if (!ADMIN_EMAIL) {
+    console.log('⚠️  Falta PRODE_ADMIN_EMAIL: el primer usuario que se registre será admin. Configuralo antes de publicar la app.');
+    return;
+  }
+  const pass = process.env.PRODE_ADMIN_PASSWORD || '';
+  if (!validPassword(pass)) throw new Error('PRODE_ADMIN_PASSWORD es obligatoria (8 o más caracteres, con letras y números)');
+  const salt = crypto.randomBytes(8).toString('hex');
+  const cur = db.prepare('SELECT * FROM users WHERE email=?').get(ADMIN_EMAIL);
+  if (!cur) {
+    db.prepare(`INSERT INTO users(email, salt, pass_hash, first_name, last_name, nick, birth_date, color, is_admin)
+      VALUES (?,?,?,?,?,?,?,?,1)`).run(ADMIN_EMAIL, salt, hashPass(pass, salt), 'Administrador', 'PRODE', 'Admin', '1990-01-01', GROUP_COLORS[0]);
+  } else if (!sameHash(hashPass(pass, cur.salt), cur.pass_hash)) {
+    db.prepare('UPDATE users SET salt=?, pass_hash=? WHERE id=?').run(salt, hashPass(pass, salt), cur.id); // la variable manda
+  }
+  db.prepare('UPDATE users SET is_admin = (email = ?)').run(ADMIN_EMAIL);
+}
+const adminId = () => db.prepare('SELECT id FROM users WHERE is_admin=1').get()?.id;
+
 function newSession(userId) {
   const token = crypto.randomBytes(24).toString('hex');
   db.prepare('INSERT INTO sessions(token, user_id) VALUES (?,?)').run(token, userId);
   return token;
 }
+bootstrapAdmin();
 const attempts = new Map();
 function throttle(key, max = 10) {
   const now = Date.now(), a = (attempts.get(key) || []).filter((t) => now - t < 10 * 60e3);
@@ -92,7 +119,10 @@ function myGroups(user) {
     FROM memberships mb JOIN groups g ON g.id=mb.group_id WHERE mb.user_id=?1 ORDER BY mb.joined_at`)
     .all(user.id).map((g) => ({ ...g, is_owner: !!g.is_owner }));
 }
-const meBundle = (u) => ({ user: publicUser(u), groups: myGroups(u) });
+const meBundle = (u) => ({
+  user: publicUser(u), groups: myGroups(u),
+  ...(u.is_admin && { admin_pending: db.prepare("SELECT COUNT(*) AS n FROM coin_requests WHERE status='pending'").get().n }),
+});
 
 // ---------- partidos ----------
 const isLocked = (m) => m.status !== 'scheduled' || new Date(m.kickoff) <= new Date();
@@ -194,10 +224,10 @@ route('POST', '/api/register', ({ body, ip }) => {
   if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
   if (body.accept !== true) throw bad(`Tenés que confirmar que tenés ${MIN_AGE} años o más y aceptar las reglas`);
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(v.value.email)) throw bad('Ya hay una cuenta con ese mail');
-  if (db.prepare('SELECT 1 FROM users WHERE nick=?').get(v.value.nick)) throw bad('Ese apodo ya está en uso, elegí otro');
+  if (/^admin/i.test(v.value.nick) || db.prepare('SELECT 1 FROM users WHERE nick=?').get(v.value.nick)) throw bad('Ese apodo ya está en uso, elegí otro');
   const code = String(body.code || '').trim();
   if (code && !db.prepare('SELECT 1 FROM groups WHERE code=?').get(code)) throw bad('No existe un grupo con ese código');
-  const first = !db.prepare('SELECT 1 FROM users LIMIT 1').get();
+  const first = !ADMIN_EMAIL && !db.prepare('SELECT 1 FROM users LIMIT 1').get();
   const salt = crypto.randomBytes(8).toString('hex'), u = v.value;
   const id = Number(db.prepare(`INSERT INTO users(email, salt, pass_hash, first_name, last_name, nick, birth_date, fav_team, color, is_admin)
     VALUES (?,?,?,?,?,?,?,?,?,?)`).run(u.email, salt, hashPass(body.password, salt), u.first_name, u.last_name, u.nick,
@@ -225,7 +255,7 @@ route('GET', '/api/me', ({ user }) => meBundle(user));
 route('PATCH', '/api/me', ({ user, body }) => {
   const v = validateAccount({ ...userById(user.id), ...body });
   if (v.error) throw bad(v.error);
-  if (db.prepare('SELECT 1 FROM users WHERE nick=? AND id<>?').get(v.value.nick, user.id)) throw bad('Ese apodo ya está en uso, elegí otro');
+  if ((!user.is_admin && /^admin/i.test(v.value.nick)) || db.prepare('SELECT 1 FROM users WHERE nick=? AND id<>?').get(v.value.nick, user.id)) throw bad('Ese apodo ya está en uso, elegí otro');
   if (db.prepare('SELECT 1 FROM users WHERE email=? AND id<>?').get(v.value.email, user.id)) throw bad('Ya hay una cuenta con ese mail');
   const cur = userById(user.id);
   let avatar = cur.avatar;
@@ -271,22 +301,34 @@ route('GET', '/api/groups/:gid/members', ({ user, params }) => {
     FROM memberships mb JOIN users u ON u.id=mb.user_id JOIN groups g ON g.id=mb.group_id
     WHERE mb.group_id=? ORDER BY u.nick`).all(Number(params.gid)).map((m) => ({ ...m, is_owner: !!m.is_owner }));
 });
-route('POST', '/api/groups/:gid/members/:uid/coins', ({ user, params, body }) => {
-  owner(user, params.gid);
-  const delta = Number(body.delta);
-  if (!Number.isInteger(delta)) throw bad('Monto inválido');
-  db.prepare('UPDATE memberships SET coins=MAX(0, coins+?) WHERE user_id=? AND group_id=?').run(delta, Number(params.uid), Number(params.gid));
-  return { ok: true };
-});
 route('POST', '/api/groups/:gid/members/:uid/password', ({ user, params, body }) => {
   // Reemplaza al "olvidé mi contraseña" por mail: el creador del grupo da una clave temporal.
   owner(user, params.gid);
   if (!member({ id: Number(params.uid) }, params.gid)) throw bad('No es parte del grupo');
+  if (userById(Number(params.uid))?.is_admin) throw new HttpError(403, 'No se puede cambiar la clave del administrador');
   if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
   const salt = crypto.randomBytes(8).toString('hex');
   db.prepare('UPDATE users SET salt=?, pass_hash=? WHERE id=?').run(salt, hashPass(body.password, salt), Number(params.uid));
   db.prepare('DELETE FROM sessions WHERE user_id=?').run(Number(params.uid));
   return { ok: true };
+});
+// fichas: solo las carga el admin, a pedido
+route('POST', '/api/groups/:gid/coin-requests', ({ user, params, body }) => {
+  const g = member(user, params.gid);
+  const amount = Number(body.amount);
+  if (!Number.isInteger(amount) || amount < 10 || amount > 1_000_000) throw bad('Pedí entre 10 y 1.000.000 de fichas');
+  const open = db.prepare("SELECT COUNT(*) AS n FROM coin_requests WHERE user_id=? AND group_id=? AND status='pending'").get(user.id, g.id).n;
+  if (open >= 3) throw bad('Ya tenés 3 pedidos esperando respuesta. Esperá a que el admin los resuelva.');
+  const note = String(body.note || '').trim().slice(0, 200) || null;
+  db.prepare('INSERT INTO coin_requests(user_id, group_id, amount, note) VALUES (?,?,?,?)').run(user.id, g.id, amount, note);
+  const a = adminId();
+  if (a) { enqueueForUser(a, 'Pedido de fichas', `${user.nick} pide ${amount} fichas en ${g.name}.`); flush(); }
+  return { ok: true };
+});
+route('GET', '/api/groups/:gid/coin-requests', ({ user, params }) => {
+  member(user, params.gid);
+  return db.prepare(`SELECT id, amount, note, status, granted, created_at FROM coin_requests
+    WHERE user_id=? AND group_id=? ORDER BY id DESC LIMIT 10`).all(user.id, Number(params.gid));
 });
 route('GET', '/api/groups/:gid/ranking', ({ user, params, url }) => {
   member(user, params.gid);
@@ -356,12 +398,85 @@ route('POST', '/api/push/unsubscribe', ({ user, body }) => {
 // lo llama el service worker del celular cuando llega un aviso
 route('POST', '/api/push/pull', ({ body }) => ({ messages: pull(String(body.endpoint || '')) }), { open: true });
 
-// administración general (primer usuario registrado)
+// ---------- panel del administrador ----------
+const sourceInfo = () => {
+  const k = apiKey();
+  return { key_set: k !== FREE_KEY, hint: k !== FREE_KEY ? '••••' + k.slice(-4) : null, from: getSetting('thesportsdb_key') ? 'panel' : process.env.THESPORTSDB_KEY ? 'variable de entorno' : 'gratuita' };
+};
 route('GET', '/api/admin/overview', () => ({
   competitions: db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM matches WHERE comp_id=c.id) AS matches
     FROM competitions c ORDER BY c.enabled DESC, c.country DESC, c.name`).all().map(({ standings_json, ...c }) => c),
   users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
+  groups: db.prepare('SELECT id, name, code FROM groups ORDER BY name').all().map((g) => ({
+    ...g, members: db.prepare(`SELECT u.id, u.nick, mb.coins FROM memberships mb JOIN users u ON u.id=mb.user_id WHERE mb.group_id=? ORDER BY u.nick`).all(g.id) })),
+  pending: db.prepare("SELECT COUNT(*) AS n FROM coin_requests WHERE status='pending'").get().n,
+  source: sourceInfo(),
 }), { admin: true });
+route('POST', '/api/admin/settings', ({ body }) => {
+  if (body.thesportsdb_key !== undefined) {
+    const k = String(body.thesportsdb_key).trim();
+    if (k && !/^[A-Za-z0-9_-]{3,80}$/.test(k)) throw bad('La clave tiene caracteres que no corresponden');
+    setSetting('thesportsdb_key', k);
+  }
+  return sourceInfo();
+}, { admin: true });
+route('POST', '/api/admin/test-source', async () => {
+  try { return { ok: true, ...(await testSource()) }; } catch (e) { return { ok: false, error: e.message }; }
+}, { admin: true });
+
+route('GET', '/api/admin/coin-requests', () => db.prepare(`SELECT r.id, r.amount, r.note, r.created_at, u.nick, u.id AS user_id, g.name AS group_name, g.id AS group_id,
+    (SELECT coins FROM memberships WHERE user_id=r.user_id AND group_id=r.group_id) AS coins
+  FROM coin_requests r JOIN users u ON u.id=r.user_id JOIN groups g ON g.id=r.group_id
+  WHERE r.status='pending' ORDER BY r.id`).all(), { admin: true });
+
+function grantCoins(userId, groupId, amount, reason) {
+  const mb = db.prepare('SELECT coins FROM memberships WHERE user_id=? AND group_id=?').get(userId, groupId);
+  if (!mb) throw bad('Ese jugador no está en ese grupo');
+  if (mb.coins + amount < 0) throw bad('No se pueden dejar fichas en negativo');
+  db.prepare('UPDATE memberships SET coins=coins+? WHERE user_id=? AND group_id=?').run(amount, userId, groupId);
+  db.prepare('INSERT INTO coin_log(user_id, group_id, amount, reason) VALUES (?,?,?,?)').run(userId, groupId, amount, reason);
+}
+route('POST', '/api/admin/coin-requests/:id', ({ params, body }) => {
+  const r = db.prepare("SELECT * FROM coin_requests WHERE id=? AND status='pending'").get(Number(params.id));
+  if (!r) throw new HttpError(404, 'Ese pedido ya fue resuelto');
+  const g = db.prepare('SELECT name FROM groups WHERE id=?').get(r.group_id);
+  if (body.action === 'approve') {
+    const amount = body.amount === undefined ? r.amount : Number(body.amount);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 1_000_000) throw bad('Monto inválido');
+    tx(() => {
+      grantCoins(r.user_id, r.group_id, amount, `Pedido #${r.id}`);
+      db.prepare("UPDATE coin_requests SET status='approved', granted=?, resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(amount, r.id);
+    });
+    enqueueForUser(r.user_id, 'Fichas cargadas', `Te cargaron ${amount} fichas en ${g.name}.`);
+  } else if (body.action === 'reject') {
+    db.prepare("UPDATE coin_requests SET status='rejected', resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(r.id);
+    enqueueForUser(r.user_id, 'Pedido de fichas', `Tu pedido de ${r.amount} fichas en ${g.name} no fue aprobado.`);
+  } else throw bad('Acción inválida');
+  flush();
+  return { ok: true };
+}, { admin: true });
+route('POST', '/api/admin/grant', ({ body }) => {
+  const amount = Number(body.amount);
+  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000) throw bad('Monto inválido');
+  tx(() => grantCoins(Number(body.user_id), Number(body.group_id), amount, String(body.reason || 'Carga directa').slice(0, 100)));
+  if (amount > 0) { enqueueForUser(Number(body.user_id), 'Fichas cargadas', `Te cargaron ${amount} fichas.`); flush(); }
+  return { ok: true };
+}, { admin: true });
+route('GET', '/api/admin/ledger', () => db.prepare(`SELECT l.id, l.amount, l.reason, l.created_at, u.nick, g.name AS group_name
+  FROM coin_log l JOIN users u ON u.id=l.user_id JOIN groups g ON g.id=l.group_id ORDER BY l.id DESC LIMIT 40`).all(), { admin: true });
+route('GET', '/api/admin/pending-matches', () => db.prepare(`SELECT m.id, m.home, m.away, m.kickoff, c.name AS comp
+  FROM matches m JOIN competitions c ON c.id=m.comp_id WHERE m.settled=0 AND m.kickoff < ? ORDER BY m.kickoff`)
+  .all(new Date().toISOString()), { admin: true });
+route('GET', '/api/admin/users', () => db.prepare(`SELECT u.id, u.email, u.nick, u.first_name, u.last_name, u.birth_date, u.is_admin, u.created_at,
+  (SELECT GROUP_CONCAT(g.name, ', ') FROM memberships mb JOIN groups g ON g.id=mb.group_id WHERE mb.user_id=u.id) AS groups
+  FROM users u ORDER BY u.created_at DESC`).all(), { admin: true });
+route('POST', '/api/admin/users/:id/password', ({ params, body }) => {
+  if (!validPassword(body.password)) throw bad(PASSWORD_MSG);
+  const salt = crypto.randomBytes(8).toString('hex');
+  db.prepare('UPDATE users SET salt=?, pass_hash=? WHERE id=? AND is_admin=0').run(salt, hashPass(body.password, salt), Number(params.id));
+  db.prepare('DELETE FROM sessions WHERE user_id=? AND user_id NOT IN (SELECT id FROM users WHERE is_admin=1)').run(Number(params.id));
+  return { ok: true };
+}, { admin: true });
 route('POST', '/api/admin/sync', async () => {
   const found = await discover();
   const report = await syncFixtures();
@@ -451,7 +566,7 @@ const server = http.createServer(async (req, res) => {
 if (process.env.PRODE_NO_LISTEN !== '1') {
   server.listen(PORT, () => {
     console.log(`PRODE listo en http://localhost:${PORT}`);
-    console.log('El primer usuario que se registre queda como administrador (maneja torneos y fixture).');
+    console.log(ADMIN_EMAIL ? `Administrador: ${ADMIN_EMAIL}` : 'Sin PRODE_ADMIN_EMAIL: el primer usuario que se registre queda como administrador.');
     startNotifier();
     if (!process.env.PRODE_DEMO && process.env.PRODE_SYNC !== '0') startScheduler();
   });

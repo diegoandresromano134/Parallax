@@ -69,6 +69,15 @@ CREATE TABLE IF NOT EXISTS push_subs (
 CREATE TABLE IF NOT EXISTS push_queue (
   id INTEGER PRIMARY KEY, endpoint TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
   pinged INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS coin_requests (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  amount INTEGER NOT NULL, note TEXT, status TEXT NOT NULL DEFAULT 'pending', -- pending|approved|rejected
+  granted INTEGER, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS coin_log (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, group_id INTEGER NOT NULL,
+  amount INTEGER NOT NULL, reason TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
 CREATE TABLE IF NOT EXISTS notified (
   user_id INTEGER NOT NULL, match_id INTEGER NOT NULL, kind TEXT NOT NULL,
   PRIMARY KEY (user_id, match_id, kind));
