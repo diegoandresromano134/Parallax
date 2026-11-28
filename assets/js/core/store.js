@@ -18,7 +18,8 @@
   const PLX = (root.PLX = root.PLX || {});
   const { util } = PLX;
 
-  const KEY = 'parallax.db.v2';
+  const NS = root.PLX_NS ? `${root.PLX_NS}.` : ''; // SaaS: cada tenant guarda sus datos en un espacio propio
+  const KEY = `${NS}parallax.db.v2`;
   const SCHEMA = 2;
   const SEED_VERSION = 3; // sube cuando cambian los datos de demostración
   const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos', 'salas', 'reservas', 'pagos', 'facturas'];

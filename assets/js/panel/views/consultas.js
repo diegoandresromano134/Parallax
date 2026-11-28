@@ -17,8 +17,8 @@
 
   function card(c) {
     const e = ESTADOS[c.estado] || ESTADOS.nueva;
-    const asunto = encodeURIComponent('PARALLAX · Tu consulta');
-    const cuerpo = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]},\n\nGracias por contactarte con PARALLAX.\n\n`);
+    const asunto = encodeURIComponent(`${PLX.marca()} · Tu consulta`);
+    const cuerpo = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]},\n\nGracias por contactarte con ${PLX.marca()}.\n\n`);
     return `
       <article class="pcard consulta${c.estado === 'nueva' ? ' is-new' : ''}">
         <div class="consulta-head">

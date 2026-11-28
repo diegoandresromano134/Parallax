@@ -24,7 +24,7 @@
     const venc = est.cargos.filter((x) => x.saldo > 0.5);
     const lineas = venc.map((x) => `• ${util.periodLabel(x.periodo)} (${x.numero}): ${util.money(x.saldo)}${x.estado === 'vencido' ? ` · vencido el ${util.fmtDate(x.vencimiento)}` : ` · vence el ${util.fmtDate(x.vencimiento)}`}`).join('\n');
     const datos = [cfg.banco && `Banco: ${cfg.banco}`, cfg.titular && `Titular: ${cfg.titular}`, cfg.cbu && `CBU: ${cfg.cbu}`, cfg.alias && `Alias: ${cfg.alias}`].filter(Boolean).join('\n');
-    return `Hola ${l.nombre || l.nombreComercial}, te escribimos de PARALLAX por el estado de tu cuenta (${l.numeroCliente}):\n${lineas}\nTotal: ${util.money(est.deuda)}\n${datos ? `\nDatos para transferir:\n${datos}\n` : ''}\nPodés informar tu pago desde el Área de Miembros. ¡Gracias!`;
+    return `Hola ${l.nombre || l.nombreComercial}, te escribimos de ${PLX.marca()} por el estado de tu cuenta (${l.numeroCliente}):\n${lineas}\nTotal: ${util.money(est.deuda)}\n${datos ? `\nDatos para transferir:\n${datos}\n` : ''}\nPodés informar tu pago desde el Área de Miembros. ¡Gracias!`;
   }
 
   /* ---------- Registrar pago ---------- */
@@ -75,7 +75,7 @@
       noAutofocus: true,
       footLeft: `<button type="button" class="btn btn-sm btn-primary" data-maction="pagar">${icon('plus', 'i-sm')} Registrar pago</button>
         ${est.deuda > 0.5 ? `<a class="btn btn-sm" target="_blank" rel="noopener" href="https://wa.me/${tel ? `549${tel.replace(/^0|^549?/, '')}` : ''}?text=${encodeURIComponent(msg)}">${icon('phone', 'i-sm')} Aviso por WhatsApp</a>
-        <a class="btn btn-sm" href="mailto:${esc(l.email || '')}?subject=${encodeURIComponent('PARALLAX · Estado de cuenta')}&body=${encodeURIComponent(msg)}">${icon('mail', 'i-sm')} Aviso por email</a>` : ''}`,
+        <a class="btn btn-sm" href="mailto:${esc(l.email || '')}?subject=${encodeURIComponent(`${PLX.marca()} · Estado de cuenta`)}&body=${encodeURIComponent(msg)}">${icon('mail', 'i-sm')} Aviso por email</a>` : ''}`,
       body: `
         ${ui.table({
           rows: est.cargos.slice().reverse(),
@@ -157,7 +157,7 @@
             <button class="btn btn-primary btn-sm" data-action="pagar">${icon('plus', 'i-sm')} Registrar pago</button>
           </div>
         </div>
-        ${faltanDatos ? `<div class="note is-magenta" style="margin-bottom:16px">${icon('alert', 'i-sm')}<div>Cargá el CBU o el alias de PARALLAX en <a href="#configuracion" style="color:var(--cyan)">Configuración</a> para que aparezcan en los avisos y en el Área de Miembros.</div></div>` : ''}
+        ${faltanDatos ? `<div class="note is-magenta" style="margin-bottom:16px">${icon('alert', 'i-sm')}<div>Cargá el CBU o el alias de ${PLX.marca()} en <a href="#configuracion" style="color:var(--cyan)">Configuración</a> para que aparezcan en los avisos y en el Área de Miembros.</div></div>` : ''}
         <div class="grid grid-kpi">
           ${ui.kpi({ label: 'Saldo a cobrar', value: util.money0(deuda), hint: `${filas.filter((x) => x.est.deuda > 0.5).length} clientes con saldo`, ic: 'receipt' })}
           ${ui.kpi({ label: 'Vencido', value: util.money0(vencido), hint: `${filas.filter((x) => x.est.vencido > 0.5).length} clientes en mora`, ic: 'alert', tone: 'magenta' })}

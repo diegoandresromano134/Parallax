@@ -10,6 +10,11 @@
   PLX.views = PLX.views || {};
   PLX.forms = PLX.forms || {};
 
+  /** Nombre comercial del prestador (marca blanca en el modo SaaS). */
+  PLX.marca = () => ((store.config().prestador || {}).nombre || 'PARALLAX');
+  /** Logo propio del prestador (Plan Ejecutivo) o el emblema por defecto. */
+  PLX.logo = () => ((store.config().prestador || {}).logo || 'assets/img/favicon.svg');
+
   const h = {
     /* ---------- Legajos ---------- */
     loc(id) { return store.get('locatarios', id); },

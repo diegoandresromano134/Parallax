@@ -103,7 +103,7 @@
           <button type="button" class="list-item link-btn" style="width:100%" data-action="firma" data-id="${c.id}">
             <span class="avatar">${icon('edit', 'i-sm')}</span>
             <div class="grow"><div class="title">${esc(h.locName(c.locatarioId))} firmó el contrato ${esc(c.numero)}</div>
-            <div class="meta">Falta la firma de PARALLAX</div></div>
+            <div class="meta">Falta la firma de ${esc(PLX.marca())}</div></div>
             ${ui.badge('Contrafirmar', 'cyan', true)}
           </button>`),
         ...(db.pagos.some((p) => p.estado === 'informado') ? [`

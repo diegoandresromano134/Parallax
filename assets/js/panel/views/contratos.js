@@ -10,7 +10,7 @@
   const { util, store, ui, h, billing, domain, icon, backend } = PLX;
   const esc = util.esc;
 
-  const LEGAL_NOTE = `<div class="note">${icon('contract', 'i-sm')}<div><strong>Contrato de locación de servicios.</strong> Vincula a PARALLAX como prestador de infraestructura y servicios compartidos con el cliente (locatario), en una relación de naturaleza estrictamente comercial entre partes independientes. Cada cliente conserva plena autonomía sobre su organización, su actividad y las personas que designa.</div></div>`;
+  const LEGAL_NOTE = `<div class="note">${icon('contract', 'i-sm')}<div><strong>Contrato de locación de servicios.</strong> Vincula al prestador como proveedor de infraestructura y servicios compartidos con el cliente (locatario), en una relación de naturaleza estrictamente comercial entre partes independientes. Cada cliente conserva plena autonomía sobre su organización, su actividad y las personas que designa.</div></div>`;
 
   /* ---------- Formularios ---------- */
   function siguienteNumero(anio) {
@@ -186,14 +186,14 @@
     const f = c.firma;
     const pendiente = est === 'sin-enviar' || est === 'anulado';
     const link = new URL('ingresar.html', root.location.href).href;
-    const mensaje = `Hola ${l.nombre || l.nombreComercial || ''}, te enviamos el contrato ${c.numero} de PARALLAX para que lo leas y lo firmes. Ingresá a ${link} con tu usuario ${l.numeroCliente || ''} y entrá a «Mi membresía». Código de verificación del documento: ${f ? f.codigo : ''}.`;
+    const mensaje = `Hola ${l.nombre || l.nombreComercial || ''}, te enviamos el contrato ${c.numero} de ${PLX.marca()} para que lo leas y lo firmes. Ingresá a ${link} con tu usuario ${l.numeroCliente || ''} y entrá a «Mi membresía». Código de verificación del documento: ${f ? f.codigo : ''}.`;
     const tel = String(l.telefono || '').replace(/\D/g, '');
-    const quien = () => `${store.config().prestador.razonSocial || 'PARALLAX'} · ${(backend.user && (backend.user.nombre || backend.user.usuario)) || 'Administración'}`;
+    const quien = () => `${store.config().prestador.razonSocial || PLX.marca()} · ${(backend.user && (backend.user.nombre || backend.user.usuario)) || 'Administración'}`;
 
     const botones = [];
     if (pendiente) botones.push(`<button type="button" class="btn btn-sm btn-primary" data-maction="enviar">${icon('arrow-right', 'i-sm')} Generar documento y enviar a firmar</button>`);
     else {
-      if (!f.prestador) botones.push(`<button type="button" class="btn btn-sm btn-outline-cyan" data-maction="firmar-prestador">${icon('edit', 'i-sm')} Firmar como PARALLAX</button>`);
+      if (!f.prestador) botones.push(`<button type="button" class="btn btn-sm btn-outline-cyan" data-maction="firmar-prestador">${icon('edit', 'i-sm')} Firmar como ${esc(PLX.marca())}</button>`);
       botones.push(`<label class="btn btn-sm" style="cursor:pointer">${icon('upload', 'i-sm')} PDF con firma digital<input type="file" accept="application/pdf" id="pdf-digital" hidden></label>`);
       botones.push(`<button type="button" class="btn btn-sm btn-ghost" data-maction="json">${icon('download', 'i-sm')} Constancia</button>`);
       if (!f.cliente) botones.push(`<button type="button" class="btn btn-sm btn-ghost" data-maction="anular">${icon('x', 'i-sm')} Anular envío</button>`);
@@ -242,7 +242,7 @@
         'firmar-prestador': () => {
           try {
             store.update('contratos', c.id, { firma: F.firmarPrestador(store.get('contratos', c.id), { nombre: quien(), fecha: new Date().toISOString(), actor: backend.user.usuario }) });
-            ui.toast('Firmaste el contrato en nombre de PARALLAX.');
+            ui.toast(`Firmaste el contrato en nombre de ${PLX.marca()}.`);
             panelFirma(c.id);
           } catch (e) { ui.toast(e.message, 'warn'); }
         },

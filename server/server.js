@@ -185,7 +185,7 @@ async function readJsonBody(req, limit = 1024 * 1024) {
 }
 
 /* ---------- Archivos estáticos ---------- */
-const PAGES = new Set(['/index.html', '/gestoria.html', '/miembros.html', '/ingresar.html']);
+const PAGES = new Set(['/index.html', '/gestoria.html', '/miembros.html', '/ingresar.html', '/suite.html', '/suite-panel.html']);
 function serveStatic(req, res, pathname) {
   if (pathname === '/') pathname = '/index.html';
   if (!PAGES.has(pathname) && !pathname.startsWith('/assets/')) return send(res, 404, 'No encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });

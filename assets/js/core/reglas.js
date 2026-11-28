@@ -122,28 +122,29 @@
     let n = 0;
     const cl = (titulo, cuerpo) => `${ORD[n++]}. ${titulo}. ${cuerpo}`;
 
+    const NOM = P.nombre || P.razonSocial || 'PARALLAX';
     const partes = [
       'CONTRATO DE LOCACIÓN DE SERVICIOS · ABONO DE MEMBRESÍA',
       `Contrato N° ${c.numero}`,
       '',
       'En la Ciudad Autónoma de Buenos Aires, entre:',
-      `EL PRESTADOR: ${P.razonSocial || P.nombre || 'PARALLAX'}, CUIT ${P.cuit || completar}, con domicilio en ${P.domicilio || completar}, en adelante «PARALLAX»;`,
+      `EL PRESTADOR: ${P.razonSocial || P.nombre || 'PARALLAX'}, CUIT ${P.cuit || completar}, con domicilio en ${P.domicilio || completar}, en adelante «${NOM}»;`,
       `y EL CLIENTE: ${L.razonSocial || L.nombreComercial || completar}${L.cuit ? `, CUIT ${L.cuit}` : ''}${L.tipo !== 'empresa' && L.documento ? `, DNI ${L.documento}` : ''}, con domicilio en ${L.domicilio || completar}${L.tipo === 'empresa' && titular ? `, representado por ${titular}${L.documento ? ` (DNI ${L.documento})` : ''}` : ''}, N° de cliente ${L.numeroCliente || completar}, en adelante «EL CLIENTE»;`,
       'convienen celebrar el presente contrato de locación de servicios, que se regirá por las siguientes cláusulas:',
       '',
-      cl('OBJETO', `PARALLAX presta a EL CLIENTE servicios de infraestructura y servicios compartidos en su espacio de coworking, en la modalidad «${plan.nombre || completar}» para ${c.puestos || 1} ${Number(c.puestos) === 1 ? 'puesto' : 'puestos'}.`),
+      cl('OBJETO', `${NOM} presta a EL CLIENTE servicios de infraestructura y servicios compartidos en su espacio de coworking, en la modalidad «${plan.nombre || completar}» para ${c.puestos || 1} ${Number(c.puestos) === 1 ? 'puesto' : 'puestos'}.`),
       cl('RECURSOS Y SERVICIOS INCLUIDOS', [
         unidades.length ? `Recursos asignados durante la vigencia: ${unidades.join(', ')}.` : 'No se asignan recursos de uso exclusivo.',
         incluidos.length ? `Cantidades mensuales incluidas en el abono: ${incluidos.join('; ')}.` : '',
         (c.servicios || []).length ? `Servicios incluidos: ${c.servicios.join(', ')}.` : ''
       ].filter(Boolean).join(' ')),
       cl('PLAZO', `El contrato rige desde el ${fmtFecha(c.fechaInicio)}${c.fechaFin ? ` hasta el ${fmtFecha(c.fechaFin)}` : ' por plazo indeterminado'}. Cualquiera de las partes puede rescindirlo con un preaviso escrito de treinta (30) días.`),
-      cl('PRECIO', `EL CLIENTE abonará un Abono de Membresía mensual de ${dinero(c.montoMensual)} más IVA. Actualización: ${c.ajuste || 'según acuerdo de partes'}. Los consumos, préstamos de equipos y usos que excedan lo incluido se facturarán según las tarifas vigentes de PARALLAX, informadas en el Área de Miembros.`),
-      cl('PAGO, VENCIMIENTO Y MORA', `El abono y los consumos de cada mes se facturan por mes vencido y vencen el día ${c.diaVencimiento || cob.diaVencimiento || 10} del mes siguiente. Medios de pago aceptados: ${medios.length ? medios.join(', ') : completar}. La mora se produce de pleno derecho por el solo vencimiento del plazo (art. 886 del Código Civil y Comercial). Las sumas impagas devengarán un interés punitorio del ${cob.tasaMensual != null ? cob.tasaMensual : completar}% mensual, calculado por día de atraso${cob.recargoFijo ? `, más un recargo administrativo de ${dinero(cob.recargoFijo)}` : ''}. Con más de ${cob.suspenderDias || 30} días de mora, PARALLAX podrá suspender la prestación de los servicios previa notificación.`),
-      cl('NATURALEZA DEL VÍNCULO', 'La relación entre las partes es estrictamente comercial y se celebra entre partes independientes, cada una con su propia organización, riesgo y responsabilidad. Las personas que EL CLIENTE autorice a ingresar actúan bajo la exclusiva organización y responsabilidad de EL CLIENTE, sin vínculo alguno con PARALLAX.'),
+      cl('PRECIO', `EL CLIENTE abonará un Abono de Membresía mensual de ${dinero(c.montoMensual)} más IVA. Actualización: ${c.ajuste || 'según acuerdo de partes'}. Los consumos, préstamos de equipos y usos que excedan lo incluido se facturarán según las tarifas vigentes de ${NOM}, informadas en el Área de Miembros.`),
+      cl('PAGO, VENCIMIENTO Y MORA', `El abono y los consumos de cada mes se facturan por mes vencido y vencen el día ${c.diaVencimiento || cob.diaVencimiento || 10} del mes siguiente. Medios de pago aceptados: ${medios.length ? medios.join(', ') : completar}. La mora se produce de pleno derecho por el solo vencimiento del plazo (art. 886 del Código Civil y Comercial). Las sumas impagas devengarán un interés punitorio del ${cob.tasaMensual != null ? cob.tasaMensual : completar}% mensual, calculado por día de atraso${cob.recargoFijo ? `, más un recargo administrativo de ${dinero(cob.recargoFijo)}` : ''}. Con más de ${cob.suspenderDias || 30} días de mora, ${NOM} podrá suspender la prestación de los servicios previa notificación.`),
+      cl('NATURALEZA DEL VÍNCULO', `La relación entre las partes es estrictamente comercial y se celebra entre partes independientes, cada una con su propia organización, riesgo y responsabilidad. Las personas que EL CLIENTE autorice a ingresar actúan bajo la exclusiva organización y responsabilidad de EL CLIENTE, sin vínculo alguno con ${NOM}.`),
       cl('USO DE LAS INSTALACIONES', 'EL CLIENTE se obliga a usar las instalaciones y los recursos conforme a su destino y al reglamento del espacio, y a devolver en el mismo estado los equipos prestados. Los faltantes o daños se cargarán a su cuenta por su valor de reposición.'),
       cl('DATOS PERSONALES', 'Los datos personales se tratan conforme a la Ley 25.326 de Protección de los Datos Personales, solo para administrar este contrato. Sus titulares pueden ejercer los derechos de acceso, rectificación y supresión.'),
-      cl('DOCUMENTO Y FIRMA ELECTRÓNICA', 'Las partes acuerdan celebrar este contrato por medios electrónicos y reconocen la validez del documento electrónico y de la firma electrónica utilizada (Ley 25.506 y arts. 286, 288 y 319 del Código Civil y Comercial). La integridad del texto se acredita mediante su huella SHA-256 y el registro de eventos de firma conservado por PARALLAX. Las partes podrán, además, suscribirlo con firma digital emitida por un certificador licenciado.'),
+      cl('DOCUMENTO Y FIRMA ELECTRÓNICA', `Las partes acuerdan celebrar este contrato por medios electrónicos y reconocen la validez del documento electrónico y de la firma electrónica utilizada (Ley 25.506 y arts. 286, 288 y 319 del Código Civil y Comercial). La integridad del texto se acredita mediante su huella SHA-256 y el registro de eventos de firma conservado por ${NOM}. Las partes podrán, además, suscribirlo con firma digital emitida por un certificador licenciado.`),
       cl('DOMICILIOS Y JURISDICCIÓN', 'Las partes constituyen domicilio en los indicados y aceptan como válidas las notificaciones a los correos electrónicos registrados. Para cualquier controversia se someten a los tribunales ordinarios en lo comercial de la Ciudad Autónoma de Buenos Aires.'),
       '',
       `Versión del documento generada el ${fmtFecha((c._fechaDocumento || hoyStr()).slice(0, 10))}.`
@@ -198,7 +199,7 @@
   function firmarPrestador(c, { nombre, fecha, actor }) {
     const f = c.firma;
     exigir(f);
-    if (f.prestador) throw new Error('PARALLAX ya firmó este contrato.');
+    if (f.prestador) throw new Error('El prestador ya firmó este contrato.');
     const prestador = { nombre, fecha, actor };
     const eventos = nuevoEvento(f.eventos, 'firmado-por-prestador', { fecha, actor, nombre, docHash: f.documento.hash });
     return Object.assign({}, f, { prestador, eventos });
@@ -387,8 +388,8 @@
     const conIva = tipo !== 11;
     const avisos = [];
     if (tipo === 1 && docTipo !== 80) avisos.push('Para emitir Factura A el cliente necesita un CUIT válido en su legajo.');
-    if (!String(P.cuit || '').replace(/\D/g, '')) avisos.push('Falta el CUIT de PARALLAX en Configuración.');
-    if (!conIva && t.iva > 0) avisos.push('PARALLAX no es Responsable Inscripto: la Factura C no discrimina IVA. Revisá la alícuota en Configuración.');
+    if (!String(P.cuit || '').replace(/\D/g, '')) avisos.push('Falta el CUIT del prestador en Configuración.');
+    if (!conIva && t.iva > 0) avisos.push('El prestador no es Responsable Inscripto: la Factura C no discrimina IVA. Revisá la alícuota en Configuración.');
     return {
       tipo, letra: LETRA[tipo], concepto: 2, docTipo, docNro, condicionIvaReceptor: COND_IVA_RECEPTOR[L.condicionIva] || 5,
       receptor: L.razonSocial || L.nombreComercial || '', fecha: hoy,

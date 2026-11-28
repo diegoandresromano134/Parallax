@@ -80,7 +80,7 @@
     routeName = next;
     sub = r.sub;
     current = views[routeName];
-    doc.title = `${current.title} · PARALLAX Gestoría`;
+    doc.title = `${current.title} · ${PLX.marca ? PLX.marca() : 'PARALLAX'} Gestoría`;
     $('#page-crumb').textContent = current.title;
     doc.querySelectorAll('.side-link').forEach((a) => {
       const on = a.dataset.route === routeName;

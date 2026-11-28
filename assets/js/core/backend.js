@@ -17,8 +17,9 @@
   const PLX = (root.PLX = root.PLX || {});
   const { util, store } = PLX;
 
-  const USERS_KEY = 'parallax.usuarios.v1';
-  const SESSION_KEY = 'parallax.sesion.v1';
+  const NS = root.PLX_NS ? `${root.PLX_NS}.` : ''; // SaaS: usuarios y archivos separados por tenant
+  const USERS_KEY = `${NS}parallax.usuarios.v1`;
+  const SESSION_KEY = `${NS}parallax.sesion.v1`;
   const DEMO_ADMIN = { usuario: 'admin', password: 'parallax' };
   const DEMO_MIEMBRO_PASS = 'demo1234';
 
@@ -97,7 +98,7 @@
     open() {
       return new Promise((resolve, reject) => {
         if (!root.indexedDB) return reject(new Error('Este navegador no permite guardar archivos.'));
-        const req = root.indexedDB.open('parallax-archivos', 1);
+        const req = root.indexedDB.open(`${NS}parallax-archivos`, 1);
         req.onupgradeneeded = () => req.result.createObjectStore('archivos');
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -182,6 +183,12 @@
     /** Detecta el modo y la sesión actual. */
     async detect() {
       if (backend.mode) return backend.mode;
+      if (root.PLX_SAAS) {
+        // Panel SaaS: la sesión la define el registro de suscriptores (assets/js/saas/registry.js)
+        backend.mode = 'demo';
+        backend.user = root.PLX_SAAS.usuario();
+        return backend.mode;
+      }
       try {
         const r = await fetch('api/estado', { credentials: 'same-origin', cache: 'no-store' });
         if (r.ok && r.headers.get('X-Parallax') === 'servidor') {
@@ -227,6 +234,7 @@
     },
 
     redirectLogin() {
+      if (root.PLX_SAAS) { root.location.href = 'suite.html#acceso'; return null; }
       const next = encodeURIComponent(root.location.pathname.split('/').pop() || 'index.html');
       root.location.href = `ingresar.html?siguiente=${next}`;
       return null;
@@ -259,6 +267,7 @@
         ls.del(SESSION_KEY);
       }
       backend.user = null;
+      if (root.PLX_SAAS) { root.PLX_SAAS.salir(); return; }
       root.location.href = 'ingresar.html';
     },
 

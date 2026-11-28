@@ -16,7 +16,7 @@
     'enviado-a-firma': 'Enviado a firma',
     'visto-por-cliente': 'Abierto por el cliente',
     'firmado-por-cliente': 'Firmado por el cliente',
-    'firmado-por-prestador': 'Firmado por PARALLAX',
+    'firmado-por-prestador': 'Firmado por el prestador',
     'envio-anulado': 'Envío anulado',
     'pdf-con-firma-digital': 'PDF con firma digital adjuntado'
   };
@@ -82,7 +82,7 @@
                 : '<p class="small muted">Todavía no firmó.</p>'}
             </section>
             <section class="ficha-sec">
-              <h3 class="ficha-title">${PLX.icon('office', 'i-sm')} Firma de PARALLAX</h3>
+              <h3 class="ficha-title">${PLX.icon('office', 'i-sm')} Firma del prestador</h3>
               ${f.prestador ? `<dl class="loc-meta">${dato('Firmó', esc(f.prestador.nombre))}${dato('Fecha y hora', util.fmtDateTime(f.prestador.fecha), true)}${dato('Usuario', esc(f.prestador.actor), true)}</dl>` : '<p class="small muted">Pendiente.</p>'}
               ${f.digital ? `<div class="note" style="margin-top:12px">${PLX.icon('file-check', 'i-sm')}<div><strong>PDF con firma digital:</strong> ${esc(f.digital.nombre)}<br><span class="hash">${esc(f.digital.hash)}</span></div></div>` : ''}
             </section>

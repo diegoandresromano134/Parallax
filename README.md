@@ -7,6 +7,8 @@ Aplicación web de PARALLAX, coworking de alto nivel dedicado a la provisión de
 | **Sitio público** | `index.html` | Personas y profesionales que todavía no conocen el coworking |
 | **Área de Miembros** | `ingresar.html` → `miembros.html` | Clientes de PARALLAX, que ingresan con usuario y contraseña, como en un club |
 | **Panel de Gestoría** | `ingresar.html` → `gestoria.html` | Equipo de administración de PARALLAX |
+| **PARALLAX Suite · Landing de ventas** | `suite.html` | Dueños de coworking que pueden suscribirse al software (SaaS) |
+| **PARALLAX Suite · Panel SaaS** | `suite.html` → `suite-panel.html` | Dueño de cada coworking suscripto (multi-tenant) |
 
 ## Dos formas de usarla
 
@@ -56,6 +58,49 @@ Con el servidor en marcha:
 3. Hacer **copias de seguridad** de esa carpeta. También podés descargar un respaldo desde *Configuración → Datos y respaldo*.
 
 La carpeta `data/` está excluida del repositorio a propósito: ahí viven los datos personales y las contraseñas cifradas.
+
+## PARALLAX Suite (SaaS multi-tenant)
+
+El mismo sistema de Gestoría de PARALLAX, empaquetado para vender suscripciones mensuales a otros dueños de coworking. Abrí `suite.html`.
+
+### Landing de ventas (`suite.html`)
+
+Hero, el problema, la solución (Gestoría de contratos, control exacto de utilería, facturación AR conectada, registro de accesos), caso de éxito PARALLAX, precios, preguntas frecuentes y tres diálogos: **demostración**, **prueba gratuita** (alta de un coworking nuevo) e **ingreso**.
+
+| Plan | Precio | Incluye |
+|---|---|---|
+| **Base** | $0/mes | Hasta 5 abonos de membresía, Gestoría básica en pantalla, resumen con marca de agua, sin exportación contable |
+| **Ejecutivo** | USD 15 / ARS 20.000 por mes | Locatarios ilimitados, historial completo, facturación AFIP activada, exportación a Excel/CSV, soporte y Asesoría técnica, panel «White Label» con logo propio |
+
+### Panel SaaS (`suite-panel.html`)
+
+Es el Panel de Gestoría completo de PARALLAX (legajos, inventario, check-in/check-out, reservas, contratos con firma electrónica, consumos, gastos, cobros), más:
+
+- **Datos aislados por cuenta (tenant).** Cada suscriptor tiene su propio espacio de datos, usuarios y archivos (`PLX_NS`, ver `store.js` y `backend.js`).
+- **Cierre Mensual** (`#cierre`). Por locatario, en tres pasos: resumen de gastos numerado → factura ARCA/AFIP → archivo contable (CSV). «Cerrar el mes» hace los pasos pendientes de todos.
+- **Suscripción y marca** (`#suscripcion`). Plan, estado, comparativa, historial de pagos, **White Label** (nombre y logo propios en el panel, los resúmenes y los contratos) y consultas a Asesoría técnica.
+- **Estado de la suscripción: Activa / Trial / Impaga.** Un banner informa el estado y avisa que, si no se abonan los USD 15, se suspenderá la Gestoría del panel. En estado **Impaga** (o prueba vencida) el panel queda bloqueado hasta regularizar o pasar al Plan Base.
+- **Límites del Plan Base.** Máximo de 5 abonos vigentes, historial de 3 meses, resúmenes con marca de agua, sin exportación CSV y sin factura AFIP; cada límite ofrece pasar al Plan Ejecutivo.
+- **Prueba gratuita** de 14 días con todas las funciones del Plan Ejecutivo.
+
+Cuentas de demostración (contraseña `demo1234`, o con un clic desde «Ver el panel en funcionamiento»):
+
+| Cuenta | Email | Plan · Estado |
+|---|---|---|
+| Parallax Coworking | `demo@parallax.example` | Ejecutivo · Activa, con aviso de cobro próximo |
+| Nodo Norte Cowork | `base@nodonorte.example` | Base · Activa |
+| Estudio Delta | `trial@estudiodelta.example` | Ejecutivo · Trial (quedan pocos días) |
+| Faro Hub | `impago@farohub.example` | Ejecutivo · Impaga (panel bloqueado) |
+
+Dentro del panel, el selector **Simular** del banner cambia el estado de una cuenta de demostración para ver cada caso.
+
+### Qué es real y qué es demostración
+
+Todo corre en el navegador, sin servidor: el **registro, el ingreso y el cobro de la suscripción son simulados** y los datos quedan solo en ese navegador. La **factura AFIP** también se simula (arma el comprobante sin CAE). Para vender el servicio hace falta, como mínimo:
+
+1. Un servidor con **una base de datos por tenant** (o un campo `tenantId` en cada colección) y autenticación real por cuenta. `server/server.js` hoy es de un solo prestador.
+2. Una **pasarela de pago** (por ejemplo Mercado Pago) que cobre los USD 15 / ARS 20.000 y actualice el estado de la suscripción por webhook; hoy lo simula `PLX_SAAS.pagar()` en `assets/js/saas/registry.js`.
+3. Un **certificado de ARCA/AFIP por tenant**: `server/arca.js` ya solicita el CAE, pero con las credenciales de un único CUIT.
 
 ## Panel de Gestoría
 
@@ -226,9 +271,10 @@ Todo el sistema refleja una relación **estrictamente comercial** de locación d
 
 ```
 index.html · ingresar.html · miembros.html · gestoria.html
+suite.html · suite-panel.html   PARALLAX Suite: landing de ventas y panel SaaS
 server/server.js             Servidor (Node.js, sin dependencias)
 server/arca.js               Factura electrónica ARCA (WSAA + WSFEv1)
-assets/css/                  base, landing, panel, miembros
+assets/css/                  base, landing, panel, miembros, suite, suite-panel
 assets/js/core/
   util.js                    Formatos es-AR, fechas, edad, CSV, validación de CUIT
   store.js                   Capa de datos (operaciones locales o hacia el servidor)
@@ -241,6 +287,7 @@ assets/js/core/
   seed.js                    Datos de demostración e inventario de ejemplo
   icons.js                   Íconos SVG
 assets/js/landing.js · login.js · miembros.js
+assets/js/saas/              registry (tenants, planes, suscripción), landing y capa SaaS del panel
 assets/js/panel/             Panel: interfaz, ayudantes, enrutador y módulos (views/)
 scripts/verificar-terminologia.sh
 ```

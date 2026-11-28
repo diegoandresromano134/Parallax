@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PARALLAX Suite · Software para coworkings</title>
+  <meta name="description" content="Automatizá contratos, controlá el consumo de utilería y emití resúmenes de gastos exactos con Facturación AFIP integrada. Software de Gestoría para dueños de coworking.">
+  <meta name="theme-color" content="#050608">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PARALLAX Suite · Gestoría administrativa para coworkings">
+  <meta property="og:description" content="Dejá el Excel. Contratos, consumos, accesos y Facturación AFIP integrada en un solo panel.">
+  <meta property="og:image" content="assets/img/og-parallax.jpg">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="assets/img/parallax-emblem.webp" type="image/webp">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/landing.css">
+  <link rel="stylesheet" href="assets/css/suite.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body class="landing">
+  <script src="assets/js/saas/registry.js"></script>
+  <script src="assets/js/core/icons.js"></script>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <div class="bg-fx" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <!-- ============================ HEADER ============================ -->
+  <header class="site-header" id="top">
+    <div class="container header-inner">
+      <a class="brand" href="#hero" aria-label="PARALLAX Suite — inicio">
+        <img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34">
+        <span class="brand-word">PARALLAX</span><span class="suite-tag">Suite</span>
+      </a>
+
+      <nav class="site-nav" id="site-nav" aria-label="Navegación principal">
+        <a href="#problema" data-nav>El problema</a>
+        <a href="#solucion" data-nav>La solución</a>
+        <a href="#caso" data-nav>Caso de éxito</a>
+        <a href="#precios" data-nav>Precios</a>
+        <a href="#preguntas" data-nav>Preguntas</a>
+        <a href="#" class="nav-gestoria" data-open="login"><svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Ingresar a mi panel</a>
+      </nav>
+
+      <div class="header-cta">
+        <a class="btn btn-ghost btn-sm hide-md" href="#" data-open="login" id="btn-ingresar"><svg class="i i-sm" aria-hidden="true"><use href="#i-login"/></svg> Ingresar</a>
+        <button class="btn btn-primary btn-sm hide-xs" type="button" data-open="reg">Prueba gratuita</button>
+        <button class="btn btn-icon nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Abrir menú">
+          <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ============================ HERO ============================ -->
+    <section class="hero hero-suite" id="hero" aria-labelledby="hero-title">
+      <div class="hero-layers" aria-hidden="true">
+        <svg class="hex hex-1" data-depth="0.6" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z"/></svg>
+        <svg class="hex hex-2" data-depth="-0.9" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z M50 4v92 M10 27l80 46 M90 27 10 73"/></svg>
+        <svg class="hex hex-4" data-depth="-1.8" viewBox="0 0 100 100"><path d="M50 4 90 27v46L50 96 10 73V27Z"/></svg>
+        <div class="beam beam-cyan" data-depth="0.4"></div>
+        <div class="beam beam-magenta" data-depth="-0.5"></div>
+      </div>
+
+      <div class="container hero-inner">
+        <div class="suite-emblem" aria-hidden="true">
+          <picture>
+            <source srcset="assets/img/parallax-emblem.webp" type="image/webp">
+            <img src="assets/img/parallax-emblem.png" alt="" width="560" height="545" fetchpriority="high">
+          </picture>
+        </div>
+        <p class="eyebrow hero-eyebrow reveal">PARALLAX Suite · Software de Gestoría para coworkings</p>
+        <h1 class="hero-title display reveal" id="hero-title">Revolucioná la Gestoría administrativa <span class="neon-text">de tu Coworking.</span></h1>
+        <p class="hero-lead reveal">Automatizá contratos, controlá el consumo de utilería y emití resúmenes de gastos exactos con Facturación AFIP integrada sin depender de hojas de cálculo.</p>
+
+        <div class="hero-actions reveal">
+          <button class="btn btn-primary btn-lg" type="button" data-open="reg">Comenzá tu prueba gratuita hoy <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+          <button class="btn btn-lg" type="button" data-open="demo"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg> Ver el panel en funcionamiento</button>
+        </div>
+
+        <ul class="hero-chips reveal" aria-label="Destacados">
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-clock"/></svg> 14 días de prueba</li>
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-layers"/></svg> Plan Base sin costo</li>
+          <li><svg class="i i-sm" aria-hidden="true"><use href="#i-receipt"/></svg> Facturación AFIP integrada</li>
+        </ul>
+
+        <!-- Vista previa del panel -->
+        <div class="mock reveal" aria-hidden="true">
+          <div class="mock-bar"><i></i><i></i><i></i><span>Panel de Gestoría · Cierre Mensual</span></div>
+          <div class="mock-body">
+            <div class="mock-side">
+              <b>Inicio</b><b>Legajos</b><b>Inventario</b><b>Check-in</b><b class="on">Cierre Mensual</b><b>Cobros</b><b>Suscripción</b>
+            </div>
+            <div class="mock-main">
+              <div class="mock-kpis">
+                <div><small>Resúmenes emitidos</small><strong>5 / 5</strong></div>
+                <div><small>Facturas AFIP</small><strong>5 / 5</strong></div>
+                <div><small>Consumos del mes</small><strong>$ 3.482.900</strong></div>
+              </div>
+              <div class="mock-rows">
+                <div><span>Celius Salud</span><em class="ok">Resumen emitido</em><em class="ok">Factura A · CAE</em><em>CSV</em></div>
+                <div><span>Nivel Salud</span><em class="ok">Resumen emitido</em><em class="ok">Factura A · CAE</em><em>CSV</em></div>
+                <div><span>M&amp;C Salud</span><em class="ok">Resumen emitido</em><em class="pend">Por facturar</em><em>CSV</em></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ EL PROBLEMA ============================ -->
+    <section class="section" id="problema" aria-labelledby="problema-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">01 — El problema</p>
+          <h2 class="section-title display" id="problema-title">¿La administración del espacio te roba más tiempo que <span class="neon-text">conseguir clientes?</span></h2>
+          <p class="section-lead">Gestionar un coworking es imposible registrando consumos a mano. Tu negocio necesita una Asesoría tecnológica centralizada.</p>
+        </header>
+
+        <div class="vs reveal">
+          <div class="vs-col vs-old">
+            <h3>Con hojas de cálculo</h3>
+            <ul>
+              <li><svg class="i i-sm"><use href="#i-x"/></svg> Resmas, horas de sala y equipos anotados a mano</li>
+              <li><svg class="i i-sm"><use href="#i-x"/></svg> Contratos en carpetas, sin saber cuáles vencen</li>
+              <li><svg class="i i-sm"><use href="#i-x"/></svg> Cierre de mes de días, con errores de cuenta</li>
+              <li><svg class="i i-sm"><use href="#i-x"/></svg> Factura armada aparte, en otro sistema</li>
+            </ul>
+          </div>
+          <div class="vs-col vs-new">
+            <h3>Con PARALLAX Suite</h3>
+            <ul>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Cada consumo queda registrado y asignado al locatario</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Contratos con firma electrónica y alertas de vencimiento</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Cierre mensual en un clic, con excedentes calculados</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Factura AFIP emitida desde el mismo panel</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ LA SOLUCIÓN ============================ -->
+    <section class="section" id="solucion" aria-labelledby="solucion-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">02 — La solución</p>
+          <h2 class="section-title display" id="solucion-title">El sistema que ya gestiona <span class="neon-text">un coworking real.</span></h2>
+          <p class="section-lead">Lo que desarrollamos para Parallax Coworking, empaquetado para que cualquier dueño de espacio lo use desde el primer día.</p>
+        </header>
+
+        <div class="services features">
+          <article class="service card-spot reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg"><use href="#i-contract"/></svg></div>
+            <h3>Gestoría de contratos</h3>
+            <p>Contratos de locación de servicios con vigencia, ajustes, firma electrónica verificable y alertas de vencimiento. Cada contrato fija qué incluye el abono.</p>
+          </article>
+          <article class="service card-spot reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg"><use href="#i-package"/></svg></div>
+            <h3>Control exacto de utilería</h3>
+            <p>Muebles, equipos numerados, papelería y horas de sala: cada préstamo y cada consumo se registra, se devuelve y se descuenta de lo incluido en el abono.</p>
+          </article>
+          <article class="service card-spot reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg"><use href="#i-receipt"/></svg></div>
+            <h3>Facturación AR conectada</h3>
+            <p>Resúmenes de gastos numerados y factura electrónica AFIP / ARCA emitida desde adentro del sistema, con el excedente ya calculado.</p>
+          </article>
+          <article class="service card-spot reveal" data-spot>
+            <div class="service-icon"><svg class="i i-lg"><use href="#i-badge"/></svg></div>
+            <h3>Registro de accesos</h3>
+            <p>Check-in y check-out por credencial: quién entró, a qué hora, qué retiró y en qué estado lo devolvió. Faltantes y daños quedan asentados.</p>
+          </article>
+        </div>
+
+        <ul class="extras reveal">
+          <li><svg class="i i-sm"><use href="#i-file-check"/></svg><span><strong>Resúmenes cruzados automáticos</strong> para cada locatario</span></li>
+          <li><svg class="i i-sm"><use href="#i-calendar"/></svg><span><strong>Reservas de salas</strong> con horas incluidas</span></li>
+          <li><svg class="i i-sm"><use href="#i-pulse"/></svg><span><strong>Cobros y mora</strong> con cuenta corriente</span></li>
+          <li><svg class="i i-sm"><use href="#i-users"/></svg><span><strong>Área de Miembros</strong> para tus locatarios</span></li>
+        </ul>
+
+        <ol class="steps reveal" aria-label="Cómo funciona">
+          <li class="step-s"><span class="n">1</span><div><h4>Cargá tu espacio</h4><p>Inventario, modalidades de abono y legajos de tus locatarios.</p></div></li>
+          <li class="step-s"><span class="n">2</span><div><h4>Registrá el día a día</h4><p>Accesos, préstamos y consumos quedan asentados en el momento.</p></div></li>
+          <li class="step-s"><span class="n">3</span><div><h4>Cerrá el mes en un clic</h4><p>Resumen de gastos, factura AFIP y archivo contable de cada locatario.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================ CASO DE ÉXITO ============================ -->
+    <section class="section" id="caso" aria-labelledby="caso-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">03 — Prueba social</p>
+          <h2 class="section-title display" id="caso-title">El caso de éxito <span class="neon-text">PARALLAX.</span></h2>
+        </header>
+
+        <figure class="proof reveal">
+          <svg class="i proof-q" aria-hidden="true"><use href="#i-shield"/></svg>
+          <blockquote>
+            <p>Probado en la más alta exigencia corporativa. Nuestro software es el motor de Parallax Coworking, gestionando la convivencia simultánea de tres unidades de negocio independientes: Celius Salud (Balro S.A.), Nivel Salud (Care Salud S.A.) y M&amp;C Salud. Garantizamos aislamiento operativo, Gestoría impecable y evitamos presunciones de dependencia laboral.</p>
+          </blockquote>
+          <ul class="proof-units" aria-label="Unidades de negocio que conviven en Parallax Coworking">
+            <li><strong>Celius Salud</strong><span>Balro S.A.</span></li>
+            <li><strong>Nivel Salud</strong><span>Care Salud S.A.</span></li>
+            <li><strong>M&amp;C Salud</strong><span>Unidad independiente</span></li>
+          </ul>
+        </figure>
+
+        <div class="pillars reveal">
+          <div><svg class="i"><use href="#i-layers"/></svg><h4>Aislamiento operativo</h4><p>Cada locatario tiene su legajo, su contrato, sus consumos y su resumen. Nada se mezcla.</p></div>
+          <div><svg class="i"><use href="#i-contract"/></svg><h4>Gestoría impecable</h4><p>Todo queda registrado, numerado y verificable: contratos, accesos, consumos y facturas.</p></div>
+          <div><svg class="i"><use href="#i-shield"/></svg><h4>Vínculo estrictamente comercial</h4><p>Locación de servicios entre partes independientes, con cláusulas que lo dejan asentado.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ DEMOSTRACIÓN ============================ -->
+    <section class="section section-demo" id="demo" aria-labelledby="demo-title">
+      <div class="container">
+        <div class="demo-band reveal">
+          <div>
+            <p class="eyebrow">Probalo ahora</p>
+            <h2 class="section-title display" id="demo-title">Entrá al panel y <span class="neon-text">recorrelo vos.</span></h2>
+            <p class="section-lead">Elegí una cuenta de demostración: coworking con Plan Ejecutivo, con Plan Base, en prueba gratuita o con la suscripción impaga para ver el bloqueo. Los datos son ilustrativos.</p>
+          </div>
+          <button class="btn btn-primary btn-lg" type="button" data-open="demo">Acceder a la demostración <svg class="i"><use href="#i-arrow-right"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ PRECIOS ============================ -->
+    <section class="section" id="precios" aria-labelledby="precios-title">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="eyebrow">04 — Precios</p>
+          <h2 class="section-title display" id="precios-title">Empezá gratis. <span class="neon-text">Crecé cuando lo necesites.</span></h2>
+        </header>
+
+        <div class="plans plans-2">
+          <article class="plan reveal" data-spot>
+            <p class="plan-kicker">PARA EMPEZAR</p>
+            <h3>Plan Base</h3>
+            <p class="price"><strong>$0</strong><span>/mes</span></p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Hasta 5 abonos de membresía</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Gestoría básica en pantalla</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Resumen con marca de agua</li>
+              <li class="no"><svg class="i i-sm"><use href="#i-x"/></svg> Sin exportación contable</li>
+            </ul>
+            <button class="btn btn-block" type="button" data-open="reg" data-plan="base">Empezar con el Plan Base</button>
+          </article>
+
+          <article class="plan plan-featured reveal" data-spot>
+            <span class="plan-flag">Recomendado</span>
+            <p class="plan-kicker">PARA OPERAR EN SERIO</p>
+            <h3>Plan Ejecutivo</h3>
+            <p class="price"><strong>$15 USD</strong><span>/ $20.000 ARS por mes</span></p>
+            <ul class="plan-list">
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Locatarios ilimitados</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Historial completo</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Facturación AFIP activada</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Exportación a Excel/CSV</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Soporte y Asesoría técnica</li>
+              <li><svg class="i i-sm"><use href="#i-check"/></svg> Panel «White Label» para que el dueño suba su propio logo</li>
+            </ul>
+            <button class="btn btn-primary btn-block" type="button" data-open="reg">Comenzá tu prueba gratuita hoy</button>
+          </article>
+        </div>
+
+        <p class="plans-note"><svg class="i i-sm"><use href="#i-shield"/></svg> Si la suscripción del Plan Ejecutivo no se abona, la Gestoría del panel se suspende. Tus datos se conservan y se habilitan al regularizar.</p>
+      </div>
+    </section>
+
+    <!-- ============================ PREGUNTAS ============================ -->
+    <section class="section" id="preguntas" aria-labelledby="preguntas-title">
+      <div class="container narrow">
+        <header class="section-head reveal">
+          <p class="eyebrow">05 — Preguntas frecuentes</p>
+          <h2 class="section-title display" id="preguntas-title">Antes de <span class="neon-text">suscribirte.</span></h2>
+        </header>
+        <div class="faq reveal">
+          <details><summary>¿Qué pasa al terminar los 14 días de prueba?</summary><p>La prueba incluye todas las funciones del Plan Ejecutivo. Al terminar podés activarlo por USD 15 al mes o continuar con el Plan Base sin costo. Si no elegís ninguna opción, la Gestoría del panel queda suspendida y tus datos se conservan hasta que regularices.</p></details>
+          <details><summary>¿Mis datos están separados de los de otros coworkings?</summary><p>Sí. Cada suscriptor tiene su propio espacio: legajos, contratos, inventario, consumos, resúmenes y facturas no se comparten con ninguna otra cuenta.</p></details>
+          <details><summary>¿Cómo funciona la Facturación AFIP?</summary><p>El panel arma la factura a partir del resumen de gastos de cada locatario. Con el certificado de AFIP / ARCA de tu empresa conectado en el servidor, el mismo botón solicita el CAE. En la demostración el comprobante se genera como simulación, sin validez fiscal.</p></details>
+          <details><summary>¿Puedo cambiar de plan cuando quiera?</summary><p>Sí. Podés pasar del Plan Base al Ejecutivo, o volver al Base, desde la sección «Suscripción y marca» del panel.</p></details>
+          <details><summary>¿Qué incluye la Asesoría técnica?</summary><p>Acompañamiento para configurar tu inventario, cargar tus locatarios y dejar lista la facturación. Está incluida en el Plan Ejecutivo.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ CIERRE ============================ -->
+    <section class="section final" aria-labelledby="final-title">
+      <div class="container final-inner reveal">
+        <h2 class="section-title display" id="final-title">Dejá el Excel. <span class="neon-text">Gestioná tu coworking.</span></h2>
+        <p class="section-lead">Creá tu cuenta en un minuto y tené el panel funcionando hoy.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-lg" type="button" data-open="reg">Comenzá tu prueba gratuita hoy <svg class="i"><use href="#i-arrow-right"/></svg></button>
+          <button class="btn btn-lg" type="button" data-open="demo">Ver la demostración</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <a class="brand" href="#hero"><img class="brand-mark" src="assets/img/favicon.svg" alt="" width="34" height="34"><span class="brand-word">PARALLAX</span><span class="suite-tag">Suite</span></a>
+          <p class="small text-2">Software de Gestoría para dueños de coworking.</p>
+        </div>
+        <nav class="footer-nav" aria-label="Pie de página">
+          <a href="#solucion">La solución</a><a href="#precios">Precios</a><a href="#preguntas">Preguntas</a><a href="index.html">Parallax Coworking</a>
+        </nav>
+      </div>
+      <p class="footer-legal">© <span id="year"></span> PARALLAX Suite. Demostración con datos ilustrativos: el registro, el ingreso y el cobro de la suscripción son simulados y quedan solo en este navegador.</p>
+    </div>
+  </footer>
+
+  <!-- ============================ DIÁLOGOS ============================ -->
+  <dialog class="sdlg" id="dlg-demo" aria-labelledby="dlg-demo-t">
+    <div class="sdlg-head"><div><h2 id="dlg-demo-t">Panel de demostración</h2><p>Elegí qué cuenta querés recorrer. Podés cambiar de estado dentro del panel.</p></div><button class="btn btn-icon btn-ghost" type="button" data-close aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="demo-list" id="demo-list"><p class="muted small">Cargando cuentas…</p></div>
+  </dialog>
+
+  <dialog class="sdlg" id="dlg-reg" aria-labelledby="dlg-reg-t">
+    <div class="sdlg-head"><div><h2 id="dlg-reg-t">Comenzá tu prueba gratuita</h2><p>14 días con todas las funciones del Plan Ejecutivo. Sin tarjeta.</p></div><button class="btn btn-icon btn-ghost" type="button" data-close aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <form class="sdlg-form" id="form-reg" novalidate>
+      <div class="field"><label for="rg-cow">Nombre de tu coworking<span class="req">*</span></label><input class="input" id="rg-cow" name="coworking" autocomplete="organization" required placeholder="Ej.: Nodo Norte Cowork"></div>
+      <div class="field"><label for="rg-nom">Tu nombre</label><input class="input" id="rg-nom" name="duenio" autocomplete="name" placeholder="Nombre y apellido"></div>
+      <div class="field"><label for="rg-mail">Email<span class="req">*</span></label><input class="input" id="rg-mail" name="email" type="email" autocomplete="email" required placeholder="vos@tucoworking.com"></div>
+      <div class="field"><label for="rg-pass">Contraseña<span class="req">*</span></label><input class="input" id="rg-pass" name="password" type="password" autocomplete="new-password" minlength="8" required><span class="hint">Mínimo 8 caracteres.</span></div>
+      <p class="form-error" id="rg-err" role="alert" hidden></p>
+      <button class="btn btn-primary btn-lg btn-block" type="submit">Crear mi cuenta y entrar <svg class="i"><use href="#i-arrow-right"/></svg></button>
+      <p class="tiny muted">Demostración: la cuenta queda solo en este navegador. ¿Ya tenés una? <a href="#" data-open="login" class="lnk">Ingresá</a>.</p>
+    </form>
+  </dialog>
+
+  <dialog class="sdlg" id="dlg-login" aria-labelledby="dlg-login-t">
+    <div class="sdlg-head"><div><h2 id="dlg-login-t">Ingresar a tu panel</h2><p>Con el email y la contraseña de tu cuenta.</p></div><button class="btn btn-icon btn-ghost" type="button" data-close aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <form class="sdlg-form" id="form-login" novalidate>
+      <div class="field"><label for="lg-mail">Email</label><input class="input" id="lg-mail" name="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="lg-pass">Contraseña</label><input class="input" id="lg-pass" name="password" type="password" autocomplete="current-password" required></div>
+      <p class="form-error" id="lg-err" role="alert" hidden></p>
+      <button class="btn btn-primary btn-lg btn-block" type="submit">Ingresar <svg class="i"><use href="#i-arrow-right"/></svg></button>
+      <p class="tiny muted">¿Todavía no tenés cuenta? <a href="#" data-open="reg" class="lnk">Probá gratis</a> o <a href="#" data-open="demo" class="lnk">mirá la demostración</a>.</p>
+    </form>
+  </dialog>
+
+  <script src="assets/js/saas/landing.js"></script>
+</body>
+</html>

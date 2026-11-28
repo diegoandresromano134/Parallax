@@ -2,7 +2,7 @@
   "name": "parallax-coworking",
   "version": "2.0.0",
   "private": true,
-  "description": "PARALLAX: sitio público, Panel de Gestoría y Área de Miembros",
+  "description": "PARALLAX: sitio público, Panel de Gestoría, Área de Miembros y PARALLAX Suite (SaaS)",
   "scripts": {
     "start": "node server/server.js",
     "verificar": "bash scripts/verificar-terminologia.sh"

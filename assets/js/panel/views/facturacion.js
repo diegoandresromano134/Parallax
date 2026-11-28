@@ -38,10 +38,10 @@
       <article class="doc">
         <header class="doc-head">
           <div class="doc-brand">
-            <img src="assets/img/favicon.svg" alt="" width="40" height="40">
+            <img src="${esc(PLX.logo())}" alt="" width="40" height="40" style="object-fit:contain">
             <div>
-              <span class="brand-word">PARALLAX</span>
-              <small>Infraestructura y servicios compartidos corporativos</small>
+              <span class="brand-word">${esc(PLX.marca())}</span>
+              <small>${PLX.saas ? 'Resumen de gastos de locación de servicios' : 'Infraestructura y servicios compartidos corporativos'}</small>
             </div>
           </div>
           <div class="doc-id">
@@ -55,7 +55,7 @@
         <div class="doc-parties">
           <div>
             <h4>Prestador</h4>
-            <p><strong>${esc(p.razonSocial || p.nombre || 'PARALLAX')}</strong><br>
+            <p><strong>${esc(p.razonSocial || p.nombre || PLX.marca())}</strong><br>
             ${p.cuit ? `CUIT ${esc(p.cuit)}` : '<span class="pend">CUIT del prestador sin configurar</span>'}<br>
             ${esc(p.condicionIva || '')}${p.domicilio ? `<br>${esc(p.domicilio)}` : ''}</p>
           </div>
@@ -423,15 +423,15 @@
         ui.toast(`${r.numero} exportado.`);
       },
       'export-csv'(el, e, ctx) {
-        util.download(`parallax-resumen-gastos-${ctx.state.periodo}.csv`, billing.toCsv(exportList(ctx.state.periodo, ctx.state)), 'text/csv;charset=utf-8');
+        util.download(`${PLX.slug ? PLX.slug() : 'parallax'}-resumen-gastos-${ctx.state.periodo}.csv`, billing.toCsv(exportList(ctx.state.periodo, ctx.state)), 'text/csv;charset=utf-8');
         ui.toast('Consolidado exportado en CSV.');
       },
       'export-json'(el, e, ctx) {
-        util.download(`parallax-resumen-gastos-${ctx.state.periodo}.json`, billing.toJson(exportList(ctx.state.periodo, ctx.state)), 'application/json');
+        util.download(`${PLX.slug ? PLX.slug() : 'parallax'}-resumen-gastos-${ctx.state.periodo}.json`, billing.toJson(exportList(ctx.state.periodo, ctx.state)), 'application/json');
         ui.toast('Consolidado exportado en JSON.');
       }
     }
   };
 
-  PLX.facturacion = { renderDoc, verResumen, emitir };
+  PLX.facturacion = { renderDoc, verResumen, emitir, verFactura };
 })(window);
