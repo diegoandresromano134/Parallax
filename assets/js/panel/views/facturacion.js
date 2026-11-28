@@ -212,6 +212,50 @@
   }
 
   /* ---------- Vista ---------- */
+  /* ---------- Factura electrónica ARCA ---------- */
+  const PV = (n) => String(n || 0).padStart(5, '0');
+  const NRO = (n) => String(n || 0).padStart(8, '0');
+  function ultimaFactura(resumenId) {
+    return store.all('facturas').filter((f) => f.resumenId === resumenId).sort((a, b) => String(a.creadoEn).localeCompare(String(b.creadoEn))).pop() || null;
+  }
+  function celdaFactura(r) {
+    const f = ultimaFactura(r.id);
+    if (!f || f.estado === 'simulada') {
+      return `${f ? `<button type="button" class="link-btn" data-action="ver-factura" data-id="${f.id}">${ui.badge(`Simulación · Factura ${f.letra}`, 'outline')}</button>` : ''}<button type="button" class="btn btn-xs btn-outline-cyan" data-action="facturar" data-id="${r.id}" style="margin-top:4px">${icon('receipt', 'i-sm')} ${f ? 'Simular de nuevo' : 'Facturar en ARCA'}</button>`;
+    }
+    return `<button type="button" class="link-btn" data-action="ver-factura" data-id="${f.id}">${ui.badge(`Factura ${f.letra} ${PV(f.puntoVenta)}-${NRO(f.numero)}`, 'cyan', true)}</button><span class="sub mono">CAE ${esc(f.cae)}</span>`;
+  }
+  function notaArca(ctx) {
+    const st = ctx.state;
+    if (!st._arca) {
+      st._arca = { cargando: true };
+      PLX.backend.arca.estado().then((e) => { st._arca = e; ctx.render(); }).catch(() => { st._arca = { configurado: false, faltan: ['servidor'] }; });
+    }
+    const a = st._arca;
+    if (a.cargando) return '';
+    if (a.simulacion) return `<div class="note" style="margin-top:16px">${icon('receipt', 'i-sm')}<div><strong>Factura electrónica ARCA · modo simulación.</strong> Sin servidor, «Facturar en ARCA» arma el comprobante (tipo, receptor, importes, fechas) pero no pide el CAE ni tiene validez. Con el servidor y el certificado de ARCA configurados, el mismo botón solicita el CAE real.</div></div>`;
+    if (!a.configurado) return `<div class="note is-magenta" style="margin-top:16px">${icon('alert', 'i-sm')}<div><strong>ARCA sin configurar en el servidor.</strong> Faltan: ${a.faltan.map(esc).join(', ')}. Ver instrucciones en el README.</div></div>`;
+    return `<div class="note" style="margin-top:16px">${icon('check', 'i-sm')}<div><strong>ARCA conectado</strong> · ${a.entorno === 'produccion' ? 'producción' : 'homologación (pruebas, sin validez)'} · CUIT ${esc(a.cuit)} · punto de venta ${esc(a.puntoVenta)}.</div></div>`;
+  }
+  function verFactura(id) {
+    const f = store.get('facturas', id);
+    const dato = (k, v, mono) => `<div><dt>${k}</dt><dd class="${mono ? 'mono' : ''}">${v || '—'}</dd></div>`;
+    const doc = { 80: 'CUIT', 96: 'DNI', 99: 'Consumidor final' }[f.docTipo] || f.docTipo;
+    const av = (f.avisos || []).concat(f.observaciones || []);
+    ui.modal({
+      title: f.estado === 'autorizada' ? `Factura ${f.letra} ${PV(f.puntoVenta)}-${NRO(f.numero)}` : `Simulación · Factura ${f.letra}`,
+      sub: f.estado === 'autorizada' ? `CAE ${esc(f.cae)} · vence ${esc(f.caeVto)} · ${f.entorno === 'produccion' ? 'producción' : 'homologación'}` : 'Datos que se enviarían a ARCA. Sin CAE y sin validez.',
+      cancelLabel: 'Cerrar',
+      body: `<dl class="loc-meta ficha-grid">
+          ${dato('Receptor', esc(f.receptor))}${dato(doc, esc(f.docNro), true)}${dato('Condición IVA del receptor', esc(String(f.condicionIvaReceptor)), true)}
+          ${dato('Fecha', util.fmtDate(f.fecha), true)}${dato('Servicio', `${util.fmtDate(f.servDesde)} al ${util.fmtDate(f.servHasta)}`, true)}${dato('Vencimiento de pago', util.fmtDate(f.vtoPago), true)}
+          ${dato('Neto gravado', util.money(f.neto), true)}${dato(`IVA ${util.num(f.alicuota)}%`, util.money(f.iva), true)}${dato('Total', `<strong>${util.money(f.total)}</strong>`, true)}
+        </dl>
+        ${f.qr ? `<p style="margin-top:14px"><a class="btn btn-sm" href="${esc(f.qr)}" target="_blank" rel="noopener">${icon('external', 'i-sm')} Verificar en ARCA (QR)</a></p>` : ''}
+        ${av.length ? `<div class="note is-magenta" style="margin-top:14px">${icon('alert', 'i-sm')}<div>${av.map(esc).join('<br>')}</div></div>` : ''}`
+    });
+  }
+
   PLX.views.facturacion = {
     title: 'Gastos y Facturación',
 
@@ -327,12 +371,14 @@
                 { label: 'Cliente', cell: (r) => esc(r.snapshot.locatario.nombreComercial) },
                 { label: 'Total', cls: 'num', cell: (r) => util.money(r.total) },
                 { label: 'Emitido', cell: (r) => `<span class="small text-2">${util.fmtDateTime(r.emitidoEn)}</span>` },
+                { label: 'Factura ARCA', cell: (r) => celdaFactura(r) },
                 { label: '', cls: 'actions', cell: (r) => ui.iconBtn('ver-emitido', 'eye', 'Ver documento emitido', `data-id="${r.id}"`) + ui.iconBtn('csv-emitido', 'download', 'Exportar CSV', `data-id="${r.id}"`) }
               ]
             })}
           </div>
         </section>
 
+        ${notaArca(ctx)}
         <div class="note" style="margin-top:16px">${icon('database', 'i-sm')}<div><strong>Integración contable.</strong> El CSV usa separador «;» y coma decimal, con una línea por concepto y su cuenta contable (configurable en <a href="#configuracion" style="color:var(--cyan)">Configuración</a>). El JSON incluye la estructura completa de cada resumen para importación automatizada. Para resúmenes emitidos se exporta la versión emitida; para los pendientes, el cálculo actual sin número.</div></div>`;
     },
 
@@ -362,6 +408,15 @@
         for (const r of pend) { if (await emitir(r.res.locatario.id, p, { silent: true })) n++; }
         ui.toast(`${n} resúmenes emitidos para ${util.periodLabel(p)}.`);
       },
+      async facturar(el) {
+        el.disabled = true;
+        try {
+          const f = await PLX.backend.arca.facturar(el.dataset.id);
+          ui.toast(f.estado === 'autorizada' ? `Factura ${f.letra} ${PV(f.puntoVenta)}-${NRO(f.numero)} autorizada · CAE ${f.cae}.` : `Simulación lista: Factura ${f.letra}. En el servidor se pedirá el CAE.`);
+          verFactura(f.id);
+        } catch (e) { ui.toast(e.message, 'warn'); el.disabled = false; }
+      },
+      'ver-factura'(el) { verFactura(el.dataset.id); },
       'csv-emitido'(el) {
         const r = store.get('resumenes', el.dataset.id);
         util.download(`resumen-${r.numero}.csv`, billing.toCsv([{ res: r.snapshot, numero: r.numero, fecha: r.emitidoEn }]), 'text/csv;charset=utf-8');

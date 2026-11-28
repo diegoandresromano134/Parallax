@@ -91,7 +91,7 @@
         const pct = x.incluido ? Math.min(100, (x.usado / x.incluido) * 100) : 0;
         const lin = res.lineas.find((l) => l.tipo === 'consumo' && l.insumoId === x.insumoId);
         return `<div class="incl">
-          <div class="incl-top"><span>${esc(x.concepto)}</span><span class="mono small">${util.num(x.usado)} / ${util.num(x.incluido)} ${esc(x.unidad)}</span></div>
+          <div class="incl-top"><span>${esc(x.concepto)}</span><span class="mono small">${util.num(x.usado)} / ${util.num(x.incluido)} ${esc(util.plural(x.unidad, x.incluido))}</span></div>
           <div class="meter" role="img" aria-label="${util.num(x.usado)} de ${util.num(x.incluido)} usados"><i style="width:${pct.toFixed(1)}%"></i></div>
           <span class="small ${lin ? 'is-low' : 'muted'}">${lin ? `Excedente: ${util.num(lin.cantidad)} ${esc(x.unidad)} · ${util.money(lin.neto)}` : `Disponible: ${util.num(Math.max(0, x.incluido - x.usado))} ${esc(x.unidad)}`}</span>
         </div>`;

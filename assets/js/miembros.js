@@ -35,7 +35,7 @@
       const pct = x.incluido ? Math.min(100, (x.usado / x.incluido) * 100) : 0;
       const lin = res.lineas.find((l) => l.tipo === 'consumo' && l.insumoId === x.insumoId);
       return `<div class="incl">
-        <div class="incl-top"><span>${esc(x.concepto)}</span><span class="mono small">${util.num(x.usado)} / ${util.num(x.incluido)} ${esc(x.unidad)}</span></div>
+        <div class="incl-top"><span>${esc(x.concepto)}</span><span class="mono small">${util.num(x.usado)} / ${util.num(x.incluido)} ${esc(util.plural(x.unidad, x.incluido))}</span></div>
         <div class="meter" role="img" aria-label="${util.num(x.usado)} de ${util.num(x.incluido)} ${esc(x.unidad)} usados"><i style="width:${pct.toFixed(1)}%"></i></div>
         <span class="small ${lin ? 'is-low' : 'muted'}">${lin ? `Excedente: ${util.num(lin.cantidad)} ${esc(x.unidad)} · ${util.money(lin.neto)}` : `Te quedan ${util.num(Math.max(0, x.incluido - x.usado))} ${esc(x.unidad)}`}</span>
       </div>`;
@@ -55,7 +55,11 @@
       const desde = l.fechaContrato || (c && c.fechaInicio);
       const devolver = a ? (a.items || []).filter((x) => x.devolver) : [];
 
+      const aFirmar = D.contratos.find((x) => PLX.reglas.firma.estado(x) === 'enviado');
+      const cuentaM = PLX.reglas.cuenta.estado(D, l.id);
       return `
+        ${aFirmar ? `<div class="banner">${icon('file-check')}<div class="grow"><strong>Tenés el contrato ${esc(aFirmar.numero)} para firmar.</strong><div class="small text-2">Leelo completo y firmalo desde acá; queda registrado con su huella SHA-256.</div></div><button type="button" class="btn btn-primary btn-sm" data-action="firmar" data-id="${aFirmar.id}">${icon('edit', 'i-sm')} Leer y firmar</button></div>` : ''}
+        ${cuentaM.vencido > 0.5 ? `<div class="banner">${icon('alert')}<div class="grow"><strong>Tenés un saldo vencido de ${util.money(cuentaM.vencido)}.</strong><div class="small text-2">Genera intereses por día de atraso. Podés pagar e informar el pago desde «Pagos».</div></div><a class="btn btn-sm" href="#pagos">${icon('receipt', 'i-sm')} Ver pagos</a></div>` : ''}
         <section class="member-hero">
           <article class="mcard" aria-label="Credencial de miembro">
             <div class="mcard-top">
@@ -88,6 +92,7 @@
         <div class="grid grid-2">
           <section class="pcard">
             <header class="pcard-head"><div><h2 class="pcard-title">${icon('contract', 'i-sm')} Mi contrato</h2><p class="pcard-sub">Contrato de locación de servicios</p></div>${c ? PLX.ui.badge(billing.estadoContrato(c).nombre, billing.estadoContrato(c).tone, true) : ''}</header>
+            ${c && c.firma && !c.firma.anulado ? `<div class="pcard-body" style="padding-bottom:0"><div class="copy-box"><span class="grow">${esc(PLX.reglas.firma.ESTADOS[PLX.reglas.firma.estado(c)].nombre)} · código ${esc(c.firma.codigo || '')}</span>${PLX.reglas.firma.estado(c) === 'enviado' ? `<button type="button" class="btn btn-xs btn-primary" data-action="firmar" data-id="${c.id}">Leer y firmar</button>` : `<button type="button" class="btn btn-xs" data-action="ver-firma" data-id="${c.id}">${icon('eye', 'i-sm')} Ver firma</button>`}</div></div>` : ''}
             <div class="pcard-body">
               ${c ? `
                 <dl class="loc-meta">
@@ -160,6 +165,92 @@
           })}
         </section>
         <p class="small muted" style="margin-top:12px">Los importes de la tabla son brutos: al facturar se descuenta primero lo incluido en tu abono.</p>`;
+    },
+
+    reservas() {
+      const l = loc();
+      st.lunes = st.lunes || PLX.agenda.lunes();
+      const hoy = util.todayStr();
+      const mias = D.reservas.filter((r) => !r.ajena && r.estado !== 'cancelada' && r.fecha >= hoy).sort((a, b) => (a.fecha + a.desde).localeCompare(b.fecha + b.desde));
+      const res = billing.compute(D, l.id, util.periodOf());
+      const horasSala = res.incluidos.filter((x) => D.salas.some((s) => s.insumoId === x.insumoId));
+      const cfg = PLX.reglas.reservas.config(D);
+      return `
+        <div class="page-head"><div><h1 class="page-title">Reservas de salas</h1><p class="page-sub">Elegí la sala y tocá un horario libre. Las horas incluidas en tu abono se descuentan solas; las que excedan se suman a tu resumen.</p></div></div>
+        ${horasSala.length ? `<section class="pcard" style="margin-bottom:16px"><div class="pcard-body">${horasSala.map((x) => `<div class="incl"><div class="incl-top"><span>${esc(x.concepto)} incluidas este mes</span><span class="mono small">${util.num(x.usado)} / ${util.num(x.incluido)} ${esc(util.plural(x.unidad, x.incluido))}</span></div><div class="meter"><i style="width:${Math.min(100, (x.usado / x.incluido) * 100).toFixed(1)}%"></i></div></div>`).join('')}</div></section>` : ''}
+        <section class="pcard"><div class="pcard-body">${PLX.agenda.render({ db: D, salaId: st.salaId, lunes: st.lunes, modo: 'miembro', locId: l.id })}</div></section>
+        <section class="pcard" style="margin-top:16px">
+          <header class="pcard-head"><h2 class="pcard-title">${icon('calendar', 'i-sm')} Mis próximas reservas</h2></header>
+          <div class="pcard-body flush">${mias.length ? `<div class="list">${mias.map((r) => `
+            <div class="list-item">
+              <span class="avatar">${icon('calendar', 'i-sm')}</span>
+              <div class="grow"><div class="title">${esc(util.fmtDayShort(r.fecha))} · ${r.desde}–${r.hasta} · ${esc((D.salas.find((x) => x.id === r.salaId) || {}).nombre || '')}</div><div class="meta">${esc(r.titulo || 'Reserva')}</div></div>
+              <button type="button" class="btn btn-xs btn-ghost" data-action="cancelar-reserva" data-id="${r.id}">${icon('x', 'i-sm')} Cancelar</button>
+            </div>`).join('')}</div>` : ui.empty('No tenés reservas próximas.', 'calendar')}</div>
+        </section>
+        <p class="small muted" style="margin-top:12px">Podés cancelar sin cargo hasta ${cfg.cancelacionHoras} h antes; después se mantiene el cargo.</p>`;
+    },
+
+    pagos() {
+      const l = loc();
+      const est = PLX.reglas.cuenta.estado(D, l.id);
+      const cob = PLX.reglas.cuenta.config(D);
+      const medios = (cob.mediosPago || []).filter((m) => m.activo !== false);
+      const pendientes = est.cargos.filter((x) => x.saldo > 0.5);
+      const pagos = D.pagos.slice().sort((a, b) => b.fecha.localeCompare(a.fecha));
+      const EST = { pagado: ['Pagado', 'outline'], pendiente: ['Por vencer', 'cyan'], parcial: ['Pago parcial', 'cyan'], vencido: ['Vencido', 'magenta'] };
+      const copiar = (k, v) => (v ? `<div class="copy-box"><span class="muted small" style="min-width:64px">${k}</span><span class="grow">${esc(v)}</span><button type="button" class="btn btn-xs btn-ghost" data-action="copiar" data-texto="${esc(v)}">${icon('copy', 'i-sm')} Copiar</button></div>` : '');
+      return `
+        <div class="page-head"><div><h1 class="page-title">Pagos</h1><p class="page-sub">Tu saldo, los vencimientos y cómo pagar. Después de pagar, informalo acá para que lo acreditemos.</p></div></div>
+        <div class="grid grid-kpi">
+          ${ui.kpi({ label: 'Saldo', value: util.money0(est.deuda), hint: pendientes.length ? `${pendientes.length} ${pendientes.length === 1 ? 'resumen' : 'resúmenes'} con saldo` : 'Estás al día', ic: 'receipt' })}
+          ${ui.kpi({ label: 'Vencido', value: util.money0(est.vencido), hint: est.diasMoraMax ? `${est.diasMoraMax} días de atraso` : 'Sin atrasos', ic: 'alert', tone: est.vencido ? 'magenta' : '' })}
+          ${ui.kpi({ label: 'Intereses por mora', value: util.money0(est.intereses), hint: `${util.num(cob.tasaMensual)}% mensual por día de atraso`, ic: 'pulse', tone: est.intereses ? 'magenta' : '' })}
+        </div>
+        <div class="grid grid-3-2">
+          <section class="pcard">
+            <header class="pcard-head"><h2 class="pcard-title">${icon('receipt', 'i-sm')} Resúmenes y vencimientos</h2></header>
+            <div class="pcard-body flush">${ui.table({
+              rows: est.cargos.slice().reverse(),
+              empty: 'Todavía no hay resúmenes emitidos.',
+              cols: [
+                { label: 'Resumen', primary: true, cell: (x) => `<span class="strong mono">${esc(x.numero)}</span><span class="sub">${util.periodLabel(x.periodo)}</span>` },
+                { label: 'Vence', cell: (x) => `<span class="mono small">${util.fmtDate(x.vencimiento)}</span>` },
+                { label: 'Total', cls: 'num', cell: (x) => util.money(x.total) },
+                { label: 'Saldo', cls: 'num', cell: (x) => `<strong>${util.money(x.saldo)}</strong>${x.intereses ? `<span class="sub">incluye ${util.money(x.saldoInteres)} de intereses</span>` : ''}` },
+                { label: 'Estado', cell: (x) => PLX.ui.badge(EST[x.estado][0], EST[x.estado][1], true) }
+              ]
+            })}</div>
+          </section>
+          <section class="pcard">
+            <header class="pcard-head"><h2 class="pcard-title">${icon('briefcase', 'i-sm')} Cómo pagar</h2></header>
+            <div class="pcard-body" style="display:grid;gap:8px">
+              ${copiar('Alias', cob.alias)}${copiar('CBU', cob.cbu)}${copiar('Titular', cob.titular)}${copiar('Banco', cob.banco)}
+              ${!cob.alias && !cob.cbu ? '<p class="small muted">Pedí los datos bancarios en recepción.</p>' : ''}
+              <p class="small muted" style="margin-top:4px">Medios aceptados: ${medios.map((m) => esc(m.nombre)).join(', ') || '—'}.</p>
+            </div>
+          </section>
+        </div>
+        <div class="grid grid-2" style="margin-top:16px">
+          <section class="pcard">
+            <header class="pcard-head"><h2 class="pcard-title">${icon('upload', 'i-sm')} Informar un pago</h2></header>
+            <form class="pcard-body" id="form-pago" novalidate>
+              ${ui.form([
+                { type: 'html', span: 2, html: `<div class="field"><label for="ip-res">Resumen que pagás</label><select class="select" id="ip-res" name="resumenId">${pendientes.map((x) => `<option value="${x.resumenId}" data-saldo="${x.saldo}">${esc(x.numero)} · ${util.periodLabel(x.periodo)} · saldo ${util.money(x.saldo)}</option>`).join('') || '<option value="">Pago a cuenta</option>'}</select></div>` },
+                { name: 'fecha', label: 'Fecha del pago', type: 'date', required: true, value: util.todayStr() },
+                { name: 'importe', label: 'Importe (ARS)', type: 'number', min: 0.01, step: 0.01, required: true, value: pendientes[0] ? pendientes[0].saldo.toFixed(2) : '' },
+                { name: 'medio', label: 'Medio', type: 'select', options: medios.map((m) => m.nombre) },
+                { name: 'referencia', label: 'N° de operación', maxlength: 120 },
+                { type: 'html', span: 2, html: '<div class="field"><label for="ip-comp">Comprobante (opcional)</label><input class="input" type="file" id="ip-comp" accept="application/pdf,image/*"></div>' }
+              ])}
+              <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary btn-sm" data-action="informar-pago">${icon('arrow-right', 'i-sm')} Informar pago</button></div>
+            </form>
+          </section>
+          <section class="pcard">
+            <header class="pcard-head"><h2 class="pcard-title">${icon('archive', 'i-sm')} Mis pagos</h2></header>
+            <div class="pcard-body flush">${pagos.length ? `<div class="list">${pagos.map((p) => { const e = domain.ESTADOS_PAGO[p.estado]; return `<div class="list-item"><div class="grow"><div class="title">${util.money(p.importe)} · ${esc(p.medio || '')}</div><div class="meta">${util.fmtDate(p.fecha)}${p.referencia ? ` · ${esc(p.referencia)}` : ''}</div></div>${PLX.ui.badge(e.nombre, e.tono, true)}</div>`; }).join('')}</div>` : ui.empty('Todavía no registrás pagos.', 'receipt')}</div>
+          </section>
+        </div>`;
     },
 
     resumenes() {
@@ -313,6 +404,106 @@
     }
   }
 
+  /* ---------- Firma del contrato ---------- */
+  function verFirma(id) {
+    const c = D.contratos.find((x) => x.id === id);
+    ui.modal({ title: `Contrato ${c.numero}`, sub: 'Constancia de firma electrónica', size: 'wide', cancelLabel: 'Cerrar', noAutofocus: true, body: PLX.firmaVista.constancia(c, {}) });
+  }
+
+  function firmar(id) {
+    const c = D.contratos.find((x) => x.id === id);
+    const l = loc();
+    if (!c || !c.firma) return;
+    backend.contrato.visto(c.id);
+    ui.modal({
+      title: `Firmar contrato ${c.numero}`,
+      sub: `Código de verificación ${esc(c.firma.codigo)} · huella SHA-256 ${esc(c.firma.documento.hash.slice(0, 16))}…`,
+      size: 'wide',
+      submitLabel: 'Firmar contrato',
+      noAutofocus: true,
+      body: `
+        <div class="contrato-texto" id="ct-texto" tabindex="0">${esc(c.firma.documento.texto)}</div>
+        <div class="form-grid" style="margin-top:16px">
+          <div class="field"><label for="fm-nombre">Nombre y apellido<span class="req">*</span></label><input class="input" id="fm-nombre" name="nombre" required value="${esc([l.nombre, l.apellido].filter(Boolean).join(' '))}"></div>
+          <div class="field"><label for="fm-dni">DNI<span class="req">*</span></label><input class="input mono" id="fm-dni" name="dni" required inputmode="numeric" value="${esc(String(l.documento || '').replace(/\D/g, ''))}"></div>
+          <div class="field span-2"><span class="label">Tu firma<span class="req">*</span></span>
+            <div class="firma-pad-wrap"><canvas class="firma-pad" id="fm-pad" aria-label="Recuadro para dibujar tu firma"></canvas><span class="firma-pad-hint" id="fm-hint">Dibujá tu firma con el dedo o el mouse</span><button type="button" class="btn btn-xs btn-ghost" data-maction="borrar">Borrar</button></div>
+          </div>
+          <label class="check span-2"><input type="checkbox" name="leido" required><span>Leí el contrato completo y acepto sus cláusulas.</span></label>
+          <label class="check span-2"><input type="checkbox" name="electronica" required><span>Acepto firmarlo electrónicamente y reconozco esta firma como propia (Ley 25.506).</span></label>
+          <div class="field span-2"><label for="fm-pass">Tu contraseña del Área de Miembros<span class="req">*</span></label><input class="input" type="password" id="fm-pass" name="password" required autocomplete="current-password"><span class="hint">La pedimos de nuevo para confirmar que sos vos quien firma.</span></div>
+        </div>`,
+      onMount(d) {
+        const cv = d.querySelector('#fm-pad');
+        const r = cv.getBoundingClientRect();
+        const ratio = Math.min(root.devicePixelRatio || 1, 2);
+        cv.width = r.width * ratio; cv.height = r.height * ratio;
+        const g = cv.getContext('2d');
+        g.scale(ratio, ratio); g.lineWidth = 2.4; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#111';
+        let dibujando = false;
+        cv.dataset.trazos = '0';
+        const pos = (e) => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+        cv.addEventListener('pointerdown', (e) => { dibujando = true; cv.setPointerCapture(e.pointerId); g.beginPath(); g.moveTo(...pos(e)); d.querySelector('#fm-hint').hidden = true; });
+        cv.addEventListener('pointermove', (e) => { if (!dibujando) return; g.lineTo(...pos(e)); g.stroke(); cv.dataset.trazos = String(Number(cv.dataset.trazos) + 1); });
+        const fin = () => { dibujando = false; };
+        cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
+      },
+      onAction: {
+        borrar: () => { const cv = document.getElementById('fm-pad'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); cv.dataset.trazos = '0'; document.getElementById('fm-hint').hidden = false; }
+      },
+      onSubmit(dat, form) {
+        const cv = form.querySelector('#fm-pad');
+        if (Number(cv.dataset.trazos) < 8) { ui.toast('Dibujá tu firma en el recuadro.', 'warn'); return false; }
+        if (!form.elements.leido.checked || !form.elements.electronica.checked) { ui.toast('Confirmá las dos casillas para firmar.', 'warn'); return false; }
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        backend.contrato.firmar(c.id, { nombre: dat.nombre, dni: dat.dni, password: dat.password, imagen: cv.toDataURL('image/png') })
+          .then(() => { refresh(); ui.close(); ui.toast('¡Listo! Firmaste el contrato. Quedó registrada la constancia con su huella SHA-256.'); setTimeout(() => verFirma(c.id), 300); })
+          .catch((e) => { btn.disabled = false; ui.toast(e.message, 'warn'); });
+        return false;
+      }
+    });
+  }
+
+  /* ---------- Reservas ---------- */
+  function reservar(fecha, hora) {
+    const sala = D.salas.find((x) => x.id === st.salaId) || D.salas[0];
+    const { duraciones } = PLX.agenda.opcionesHorario(D);
+    const ins = D.insumos.find((i) => i.id === sala.insumoId);
+    ui.modal({
+      title: `Reservar ${sala.nombre}`,
+      sub: `${esc(util.fmtDateLong(fecha))} desde las ${hora} · hasta ${sala.capacidad || '—'} personas`,
+      size: 'narrow',
+      submitLabel: 'Confirmar reserva',
+      body: ui.form([
+        { name: 'duracion', label: 'Duración', type: 'select', span: 2, options: duraciones, value: 60 },
+        { name: 'titulo', label: 'Motivo (opcional)', span: 2, maxlength: 120, placeholder: 'Ej.: reunión con clientes' },
+        { name: 'personas', label: 'Personas', type: 'number', min: 1, max: sala.capacidad || 99, step: 1, span: 2 }
+      ]) + `<p class="small muted" style="margin-top:12px">${ins ? `Tarifa: ${util.money(ins.precio)} por ${esc(ins.unidad)}. Si tu abono incluye horas de sala, se descuentan primero.` : 'Sin cargo.'}</p>`,
+      onSubmit(d, form) {
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        backend.reservas.crear({ salaId: sala.id, fecha, desde: hora, hasta: PLX.agenda.sumar(hora, d.duracion), titulo: d.titulo, personas: d.personas })
+          .then((r) => { refresh(); ui.close(); ui.toast(`Reserva confirmada: ${sala.nombre}, ${util.fmtDate(r.fecha)} de ${r.desde} a ${r.hasta}.`); })
+          .catch((e) => { btn.disabled = false; ui.toast(e.message, 'warn'); });
+        return false;
+      }
+    });
+  }
+
+  async function cancelarReserva(id) {
+    const r = D.reservas.find((x) => x.id === id);
+    const pol = PLX.reglas.reservas.cancelacion(D, r);
+    const ok = await ui.confirm({
+      title: 'Cancelar reserva',
+      message: `${util.fmtDate(r.fecha)} de ${r.desde} a ${r.hasta}.${pol.tarde ? `<br><br>Faltan menos de ${pol.horas} h: <strong>se mantiene el cargo</strong>.` : ' Se cancela sin cargo.'}`,
+      confirmLabel: 'Cancelar reserva',
+      danger: true
+    });
+    if (!ok) return;
+    try { const x = await backend.reservas.cancelar(id); refresh(); ui.toast(x.cargoMantenido ? 'Reserva cancelada; se mantiene el cargo.' : 'Reserva cancelada sin cargo.'); } catch (e) { ui.toast(e.message, 'warn'); }
+  }
+
   /* ---------- Router y eventos ---------- */
   let ruta = 'inicio';
   function render() {
@@ -339,6 +530,28 @@
     'period-prev': () => { st.periodo = util.shiftPeriod(st.periodo, -1); render(); },
     'period-next': () => { st.periodo = util.shiftPeriod(st.periodo, 1); render(); },
     'ver-resumen': (el) => verResumen(el.dataset.id),
+    firmar: (el) => firmar(el.dataset.id),
+    'ver-firma': (el) => verFirma(el.dataset.id),
+    slot: (el) => reservar(el.dataset.fecha, el.dataset.hora),
+    reserva: (el) => { const r = D.reservas.find((x) => x.id === el.dataset.id); if (r && !r.ajena && r.fecha >= util.todayStr()) cancelarReserva(r.id); },
+    'cancelar-reserva': (el) => cancelarReserva(el.dataset.id),
+    'ag-sala': (el) => { st.salaId = el.dataset.sala; render(); },
+    'ag-prev': () => { st.lunes = util.addDays(st.lunes, -7); render(); },
+    'ag-next': () => { st.lunes = util.addDays(st.lunes, 7); render(); },
+    'ag-hoy': () => { st.lunes = PLX.agenda.lunes(); render(); },
+    copiar: (el) => {
+      const t = el.dataset.texto;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => ui.toast('Copiado.')).catch(() => ui.toast('No se pudo copiar: seleccioná el texto.', 'warn'));
+    },
+    async 'informar-pago'(el) {
+      const f = $('#form-pago');
+      if (!ui.validate(f)) return;
+      const d = ui.read(f);
+      const archivo = f.querySelector('#ip-comp').files[0] || null;
+      el.disabled = true;
+      try { await backend.pagos.informar(d, archivo); ui.toast('Pago informado. Lo vamos a acreditar cuando se confirme.'); refresh(); }
+      catch (e) { ui.toast(e.message, 'warn'); el.disabled = false; }
+    },
     'ver-doc': (el) => abrirDoc(el.dataset.id, false),
     'bajar-doc': (el) => abrirDoc(el.dataset.id, true),
     async 'enviar-solicitud'() {

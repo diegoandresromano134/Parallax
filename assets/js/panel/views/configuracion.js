@@ -71,6 +71,41 @@
           </section>
         </div>
 
+        <div class="grid grid-2" style="margin-top:16px">
+          <section class="pcard">
+            <header class="pcard-head"><div><h2 class="pcard-title">${icon('receipt', 'i-sm')} Cobros y medios de pago</h2><p class="pcard-sub">Se muestran a los miembros y en los avisos de vencimiento.</p></div></header>
+            <form class="pcard-body" id="form-cobros" novalidate>
+              <div class="checks" style="margin-bottom:14px">${(cfg.cobros.mediosPago || []).map((m) => `<label class="check"><input type="checkbox" name="medio_${m.id}"${m.activo !== false ? ' checked' : ''}><span>${esc(m.nombre)}</span></label>`).join('')}</div>
+              ${ui.form([
+                { name: 'banco', label: 'Banco', value: cfg.cobros.banco, maxlength: 80 },
+                { name: 'titular', label: 'Titular de la cuenta', value: cfg.cobros.titular, maxlength: 120 },
+                { name: 'cbu', label: 'CBU / CVU', value: cfg.cobros.cbu, cls: 'mono', maxlength: 22, attrs: 'inputmode="numeric"' },
+                { name: 'alias', label: 'Alias', value: cfg.cobros.alias, cls: 'mono', maxlength: 40 },
+                { name: 'diaVencimiento', label: 'Día de vencimiento (por defecto)', type: 'number', min: 1, max: 28, step: 1, value: cfg.cobros.diaVencimiento, hint: 'Cada contrato puede tener el suyo.' },
+                { name: 'tasaMensual', label: 'Interés por mora (% mensual)', type: 'number', min: 0, max: 30, step: 0.01, value: cfg.cobros.tasaMensual, hint: 'Se calcula por día de atraso.' },
+                { name: 'diasGracia', label: 'Días de gracia', type: 'number', min: 0, max: 30, step: 1, value: cfg.cobros.diasGracia, hint: 'Si paga dentro de estos días, no hay intereses.' },
+                { name: 'recargoFijo', label: 'Recargo fijo por mora (ARS)', type: 'number', min: 0, step: 0.01, value: cfg.cobros.recargoFijo },
+                { name: 'suspenderDias', label: 'Suspender servicios a los (días de mora)', type: 'number', min: 1, step: 1, value: cfg.cobros.suspenderDias, span: 2 }
+              ])}
+              <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-action="guardar-cobros">${icon('check', 'i-sm')} Guardar</button></div>
+            </form>
+          </section>
+          <section class="pcard">
+            <header class="pcard-head"><div><h2 class="pcard-title">${icon('calendar', 'i-sm')} Salas y reservas</h2><p class="pcard-sub">Reglas del calendario que usan los miembros.</p></div></header>
+            <form class="pcard-body" id="form-reservas" novalidate>
+              ${ui.form([
+                { name: 'apertura', label: 'Abre a las', type: 'time', value: cfg.reservas.apertura, required: true },
+                { name: 'cierre', label: 'Cierra a las', type: 'time', value: cfg.reservas.cierre, required: true },
+                { name: 'paso', label: 'Bloques de', type: 'select', options: [{ value: 15, label: '15 minutos' }, { value: 30, label: '30 minutos' }, { value: 60, label: '1 hora' }], value: cfg.reservas.paso },
+                { name: 'maxHoras', label: 'Duración máxima (horas)', type: 'number', min: 1, max: 12, step: 1, value: cfg.reservas.maxHoras },
+                { name: 'cancelacionHoras', label: 'Cancelación sin cargo hasta (horas antes)', type: 'number', min: 0, max: 168, step: 1, value: cfg.reservas.cancelacionHoras, span: 2 }
+              ])}
+              <div class="checks" style="margin-top:14px">${['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'].map((d, i) => `<label class="check"><input type="checkbox" name="dia_${i}"${cfg.reservas.dias.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
+              <div style="margin-top:16px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-action="guardar-reservas">${icon('check', 'i-sm')} Guardar</button></div>
+            </form>
+          </section>
+        </div>
+
         <section class="pcard" style="margin-top:16px">
           <header class="pcard-head">
             <div>
@@ -126,6 +161,30 @@
         d.cuit = util.fmtCuit(d.cuit);
         store.setConfig({ prestador: d });
         ui.toast('Datos del prestador guardados.');
+      },
+      'guardar-cobros'() {
+        const form = document.getElementById('form-cobros');
+        if (!ui.validate(form)) return;
+        const d = ui.read(form);
+        const cob = store.config().cobros;
+        const cbu = String(d.cbu || '').replace(/\D/g, '');
+        if (cbu && cbu.length !== 22) { ui.toast('El CBU o CVU tiene 22 dígitos.', 'warn'); return; }
+        store.setConfig({ cobros: Object.assign({}, cob, {
+          mediosPago: cob.mediosPago.map((m) => Object.assign({}, m, { activo: !!d[`medio_${m.id}`] })),
+          banco: d.banco, titular: d.titular, cbu, alias: d.alias,
+          diaVencimiento: d.diaVencimiento || 10, tasaMensual: d.tasaMensual || 0, diasGracia: d.diasGracia || 0, recargoFijo: d.recargoFijo || 0, suspenderDias: d.suspenderDias || 30
+        }) });
+        ui.toast('Cobros y medios de pago guardados.');
+      },
+      'guardar-reservas'() {
+        const form = document.getElementById('form-reservas');
+        if (!ui.validate(form)) return;
+        const d = ui.read(form);
+        if (d.cierre <= d.apertura) { ui.toast('El horario de cierre debe ser posterior a la apertura.', 'warn'); return; }
+        const dias = [0, 1, 2, 3, 4, 5, 6].filter((i) => d[`dia_${i}`]);
+        if (!dias.length) { ui.toast('Elegí al menos un día.', 'warn'); return; }
+        store.setConfig({ reservas: { apertura: d.apertura, cierre: d.cierre, paso: Number(d.paso) || 30, maxHoras: d.maxHoras || 4, cancelacionHoras: d.cancelacionHoras ?? 24, dias } });
+        ui.toast('Reglas de reservas guardadas.');
       },
       'guardar-facturacion'() {
         const form = document.getElementById('form-facturacion');

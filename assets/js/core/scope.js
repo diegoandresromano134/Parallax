@@ -45,7 +45,9 @@
         prestador: cfg.prestador,
         ivaAlicuota: cfg.ivaAlicuota,
         prorrateo: cfg.prorrateo,
-        cuentas: cfg.cuentas
+        cuentas: cfg.cuentas,
+        cobros: cfg.cobros,
+        reservas: cfg.reservas
       },
       locatarios: legajo ? [legajo] : [],
       planes: list('planes'),
@@ -56,7 +58,12 @@
       consumos,
       consultas: list('consultas').filter((c) => c.origen === 'miembro' && propio(c)),
       resumenes: list('resumenes').filter((r) => propio(r) && r.estado === 'emitido'),
-      documentos: list('documentos').filter((d) => propio(d) && d.visibleMiembro !== false)
+      documentos: list('documentos').filter((d) => propio(d) && d.visibleMiembro !== false),
+      salas: list('salas').filter((x) => x.activa !== false),
+      // Reservas propias completas; las de otros clientes solo como «ocupado»
+      reservas: list('reservas').filter((r) => r.estado !== 'cancelada' || propio(r)).map((r) => (propio(r) ? r : { id: r.id, salaId: r.salaId, fecha: r.fecha, desde: r.desde, hasta: r.hasta, estado: r.estado, ajena: true })),
+      pagos: list('pagos').filter(propio),
+      facturas: list('facturas').filter(propio)
     };
   }
 

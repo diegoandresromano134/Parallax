@@ -42,6 +42,9 @@
           <svg class="i" aria-hidden="true"><use href="#i-badge"/></svg> Check-in / Check-out
           <span class="count is-cyan" id="count-presentes" hidden></span>
         </a>
+        <a class="side-link" href="#reservas" data-route="reservas">
+          <svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg> Reservas de salas
+        </a>
         <p class="side-label">Gestoría</p>
         <a class="side-link" href="#contratos" data-route="contratos">
           <svg class="i" aria-hidden="true"><use href="#i-contract"/></svg> Gestoría de Contratos
@@ -51,6 +54,10 @@
         </a>
         <a class="side-link" href="#facturacion" data-route="facturacion">
           <svg class="i" aria-hidden="true"><use href="#i-receipt"/></svg> Gastos y Facturación
+        </a>
+        <a class="side-link" href="#cobros" data-route="cobros">
+          <svg class="i" aria-hidden="true"><use href="#i-pulse"/></svg> Cobros
+          <span class="count" id="count-cobros" hidden></span>
         </a>
         <p class="side-label">Comunicación</p>
         <a class="side-link" href="#consultas" data-route="consultas">
@@ -100,21 +107,26 @@
   <div id="print-root" aria-hidden="true"></div>
   <div class="toast-stack" id="toasts" aria-live="polite"></div>
 
+  <script src="assets/js/core/reglas.js"></script>
   <script src="assets/js/core/util.js"></script>
   <script src="assets/js/core/store.js"></script>
   <script src="assets/js/core/billing.js"></script>
   <script src="assets/js/core/scope.js"></script>
   <script src="assets/js/core/seed.js"></script>
   <script src="assets/js/core/backend.js"></script>
+  <script src="assets/js/core/agenda.js"></script>
+  <script src="assets/js/core/firma-vista.js"></script>
   <script src="assets/js/panel/ui.js"></script>
   <script src="assets/js/panel/helpers.js"></script>
   <script src="assets/js/panel/views/inicio.js"></script>
   <script src="assets/js/panel/views/legajos.js"></script>
   <script src="assets/js/panel/views/inventario.js"></script>
   <script src="assets/js/panel/views/checkin.js"></script>
+  <script src="assets/js/panel/views/reservas.js"></script>
   <script src="assets/js/panel/views/contratos.js"></script>
   <script src="assets/js/panel/views/consumos.js"></script>
   <script src="assets/js/panel/views/facturacion.js"></script>
+  <script src="assets/js/panel/views/cobros.js"></script>
   <script src="assets/js/panel/views/consultas.js"></script>
   <script src="assets/js/panel/views/configuracion.js"></script>
   <script src="assets/js/panel/app.js"></script>

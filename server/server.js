@@ -22,11 +22,16 @@
    ========================================================================== */
 'use strict';
 
+// Hora de Buenos Aires para vencimientos, reservas y constancias de firma
+process.env.TZ = process.env.TZ || 'America/Argentina/Buenos_Aires';
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { miembro: scopeMiembro } = require('../assets/js/core/scope.js');
+const reglas = require('../assets/js/core/reglas.js');
+const arca = require('./arca.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -40,7 +45,7 @@ const COOKIE_SECURE = process.env.PARALLAX_COOKIE_SECURE === '1';
 const MAX_JSON = 25 * 1024 * 1024;
 const MAX_FILE = 15 * 1024 * 1024;
 
-const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos'];
+const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos', 'salas', 'reservas', 'pagos', 'facturas'];
 
 /* ---------- Persistencia ---------- */
 fs.mkdirSync(FILES_DIR, { recursive: true });
@@ -337,6 +342,92 @@ async function handleApi(req, res, url) {
     return json(res, 201, { consulta });
   }
 
+  // Firma del contrato por el miembro
+  const clientIp = String(req.headers['x-forwarded-for'] || ip).split(',')[0].trim();
+  const ua = String(req.headers['user-agent'] || '').slice(0, 240);
+  const ahoraIso = () => new Date().toISOString();
+  const propioContrato = (id) => db.contratos.find((c) => c.id === id && c.locatarioId === user.locatarioId);
+
+  if (p === 'miembro/contrato/visto' && req.method === 'POST' && user.rol === 'miembro') {
+    const b = await readJsonBody(req);
+    const c = propioContrato(b.contratoId);
+    if (!c || !c.firma) return fail(res, 404, 'Contrato no encontrado.');
+    c.firma = reglas.firma.registrarVista(c, { fecha: ahoraIso(), actor: user.usuario, ip: clientIp, ua });
+    db.meta.rev += 1; saveDb();
+    return json(res, 200, { firma: c.firma });
+  }
+  if (p === 'miembro/contrato/firmar' && req.method === 'POST' && user.rol === 'miembro') {
+    if (limited(`firma:${user.id}`, 10, 15 * 60000)) return fail(res, 429, 'Demasiados intentos. Esperá unos minutos.');
+    const b = await readJsonBody(req, 1024 * 1024);
+    if (!verifyPassword(b.password, user)) return fail(res, 400, 'La contraseña no es correcta.');
+    const c = propioContrato(b.contratoId);
+    if (!c) return fail(res, 404, 'Contrato no encontrado.');
+    try {
+      c.firma = reglas.firma.firmarCliente(c, { nombre: b.nombre, dni: b.dni, imagen: typeof b.imagen === 'string' && b.imagen.length < 600000 ? b.imagen : null }, { fecha: ahoraIso(), actor: user.usuario, ip: clientIp, ua });
+    } catch (e) { return fail(res, 400, e.message); }
+    db.meta.rev += 1; saveDb();
+    return json(res, 200, { firma: c.firma });
+  }
+
+  // Reservas de salas por el miembro
+  if (p === 'miembro/reservas' && req.method === 'POST' && user.rol === 'miembro') {
+    if (limited(`reserva:${user.id}`, 40, 60 * 60000)) return fail(res, 429, 'Hiciste muchas reservas seguidas. Probá más tarde.');
+    const b = await readJsonBody(req);
+    const d = { salaId: String(b.salaId || ''), fecha: String(b.fecha || ''), desde: String(b.desde || ''), hasta: String(b.hasta || ''), titulo: b.titulo, personas: b.personas, locatarioId: user.locatarioId };
+    const err = reglas.reservas.validar(db, d, new Date());
+    if (err) return fail(res, 400, err);
+    const { reserva, consumo } = reglas.reservas.armar(db, d, { id: uid('rsv'), consumoId: uid('cns'), fecha: ahoraIso(), origen: 'miembro' });
+    db.reservas.push(reserva);
+    if (consumo) db.consumos.push(consumo);
+    db.meta.rev += 1; saveDb();
+    return json(res, 201, { reserva, consumo });
+  }
+  const mCancel = p.match(/^miembro\/reservas\/([a-zA-Z0-9_-]+)\/cancelar$/);
+  if (mCancel && req.method === 'POST' && user.rol === 'miembro') {
+    const r = db.reservas.find((x) => x.id === mCancel[1] && x.locatarioId === user.locatarioId);
+    if (!r || r.estado === 'cancelada') return fail(res, 404, 'Reserva no encontrada.');
+    const pol = reglas.reservas.cancelacion(db, r, new Date());
+    if (pol.yaPaso) return fail(res, 400, 'La reserva ya comenzó; no se puede cancelar.');
+    r.estado = 'cancelada';
+    r.canceladaEn = ahoraIso();
+    if (!pol.tarde) db.consumos = db.consumos.filter((c) => c.id !== r.consumoId);
+    else { const cns = db.consumos.find((c) => c.id === r.consumoId); if (cns) cns.nota += ' · cancelada con menos de ' + pol.horas + ' h'; }
+    db.meta.rev += 1; saveDb();
+    return json(res, 200, { reserva: r, cargoMantenido: pol.tarde });
+  }
+
+  // Pagos informados por el miembro
+  if (p === 'miembro/pagos' && req.method === 'POST' && user.rol === 'miembro') {
+    if (limited(`pago:${user.id}`, 20, 60 * 60000)) return fail(res, 429, 'Probá más tarde.');
+    const b = await readJsonBody(req);
+    const importe = Number(b.importe);
+    if (!(importe > 0)) return fail(res, 400, 'Indicá el importe pagado.');
+    const resumen = db.resumenes.find((r) => r.id === b.resumenId && r.locatarioId === user.locatarioId);
+    const pago = {
+      id: uid('pag'), locatarioId: user.locatarioId, resumenId: resumen ? resumen.id : null, fecha: /^\d{4}-\d{2}-\d{2}$/.test(b.fecha) ? b.fecha : reglas.util.hoyStr(),
+      importe: Math.round(importe * 100) / 100, medio: String(b.medio || '').slice(0, 60), referencia: String(b.referencia || '').slice(0, 120),
+      comprobanteId: db.documentos.some((d) => d.id === b.comprobanteId && d.locatarioId === user.locatarioId) ? b.comprobanteId : null,
+      estado: 'informado', origen: 'miembro', creadoEn: ahoraIso()
+    };
+    db.pagos.push(pago);
+    db.meta.rev += 1; saveDb();
+    return json(res, 201, { pago });
+  }
+  if (p === 'miembro/archivos' && req.method === 'POST' && user.rol === 'miembro') {
+    if (limited(`subida:${user.id}`, 20, 60 * 60000)) return fail(res, 429, 'Probá más tarde.');
+    const buf = await readBody(req, 10 * 1024 * 1024);
+    const doc = {
+      id: uid('doc'), locatarioId: user.locatarioId, contratoId: null,
+      nombre: String(url.searchParams.get('nombre') || 'comprobante').replace(/[\\/\r\n]/g, '_').slice(0, 160),
+      tipo: String(req.headers['content-type'] || 'application/octet-stream').slice(0, 100), tamano: buf.length,
+      categoria: 'Comprobante de pago', visibleMiembro: true, subidoPor: 'miembro', subidoEn: ahoraIso(), creadoEn: ahoraIso()
+    };
+    fs.writeFileSync(path.join(FILES_DIR, doc.id), buf);
+    db.documentos.push(doc);
+    db.meta.rev += 1; saveDb();
+    return json(res, 201, { documento: doc });
+  }
+
   // Archivos: lectura (administración o el miembro dueño)
   const mFile = p.match(/^archivos\/([a-zA-Z0-9_-]+)$/);
   if (mFile && req.method === 'GET') {
@@ -366,6 +457,23 @@ async function handleApi(req, res, url) {
   }
 
   if (p === 'usuarios' && req.method === 'GET') return json(res, 200, { usuarios: users.map(publicUser) });
+
+  // Factura electrónica ARCA
+  if (p === 'arca/estado' && req.method === 'GET') return json(res, 200, arca.estado());
+  if (p === 'arca/facturar' && req.method === 'POST') {
+    const b = await readJsonBody(req);
+    const r = db.resumenes.find((x) => x.id === b.resumenId && x.estado === 'emitido');
+    if (!r) return fail(res, 404, 'Resumen no encontrado.');
+    if (db.facturas.some((f) => f.resumenId === r.id && f.estado === 'autorizada')) return fail(res, 400, 'Ese resumen ya tiene factura autorizada.');
+    try {
+      const factura = await arca.facturar(db, r, { id: uid('fac') });
+      db.facturas.push(factura);
+      db.meta.rev += 1; saveDb();
+      return json(res, 201, { factura });
+    } catch (e) {
+      return fail(res, 502, `ARCA: ${e.message}`);
+    }
+  }
 
   if (p === 'usuarios' && req.method === 'POST') {
     const b = await readJsonBody(req);

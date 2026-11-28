@@ -107,6 +107,10 @@
     const cp = $('#count-presentes');
     cp.textContent = presentes;
     cp.hidden = !presentes;
+    const deudores = store.all('locatarios').filter((l) => PLX.reglas.cuenta.estado(store.db, l.id).vencido > 0.5).length + store.all('pagos').filter((p) => p.estado === 'informado').length;
+    const ck = $('#count-cobros');
+    ck.textContent = deudores;
+    ck.hidden = !deudores;
     const cc = $('#count-consultas');
     cc.textContent = nuevas;
     cc.hidden = !nuevas;

@@ -141,12 +141,23 @@
       if (m < 0 || (m === 0 && hoy.getDate() < n.getDate())) e--;
       return e >= 0 && e < 130 ? e : null;
     },
+    /** Plural de una unidad de medida: hora → horas, unidad → unidades. */
+    plural(u, n) {
+      if (Number(n) === 1 || !u) return u || '';
+      if (u === 'unidad') return 'unidades';
+      if (u === 'mes') return 'meses';
+      if (u === 'kg') return 'kg';
+      return /[aeiouáéíóú]$/i.test(u) ? `${u}s` : `${u}es`;
+    },
     fmtBytes(b) {
       if (b == null) return '';
       if (b < 1024) return `${b} B`;
       if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`;
       return `${(b / 1048576).toFixed(1).replace('.', ',')} MB`;
     },
+
+    /** Huella SHA-256 (la misma función que usa el servidor). */
+    sha256(x) { return root.PLX.reglas.sha256(x); },
 
     /* ---------- Texto ---------- */
     esc(s) {

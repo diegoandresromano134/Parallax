@@ -46,6 +46,8 @@ Con el servidor en marcha:
 | `PARALLAX_ADMIN_USER` | Usuario administrador inicial | `admin` |
 | `PARALLAX_ADMIN_PASSWORD` | Contraseña inicial del administrador | se genera y se muestra en la consola |
 | `PARALLAX_COOKIE_SECURE` | `1` para marcar la cookie como segura (obligatorio con HTTPS) | — |
+| `ARCA_CUIT` · `ARCA_CERT` · `ARCA_KEY` · `ARCA_PUNTO_VENTA` | Factura electrónica (ver más abajo) | — |
+| `ARCA_PRODUCCION` | `1` para facturar en producción | homologación |
 
 **Para publicarla en internet** sirve cualquier proveedor que ejecute Node.js (un VPS, Render, Railway, Fly.io, etc.). Hay tres requisitos:
 
@@ -111,6 +113,72 @@ El menú sigue el orden de trabajo diario.
   - las solicitudes que envían los miembros (reservas de sala, insumos, etc.).
 - **Configuración.** Datos del prestador, alícuota de IVA, plan de cuentas, usuarios de administración, cambio de contraseña, respaldo y restauración.
 
+### Firma electrónica de contratos
+
+Desde *Gestoría de Contratos*, en la columna **Firma**, se abre el panel de cada contrato.
+
+1. **Enviar a firmar.** Se genera el texto del contrato con los datos actuales y se calcula su **huella SHA-256**. Con ella se arma un **código de verificación** de 12 caracteres. El contrato queda pendiente de firma.
+2. **Avisar al cliente.** El mensaje se manda por WhatsApp o email; el cliente ve un aviso al ingresar al Área de Miembros.
+3. **Firma del cliente.** El cliente lee el contrato completo, dibuja su firma, confirma nombre y DNI, acepta las cláusulas y **reingresa su contraseña**.
+4. **Constancia del servidor.** El servidor registra la fecha y hora, la IP y el dispositivo.
+5. **Contrafirma.** PARALLAX firma desde el mismo panel y el contrato queda *Firmado por ambas partes*.
+6. **Verificación.** Al abrir el panel se recalcula la huella del texto, la cadena de eventos y la huella de la firma. Si alguien alterara el texto, se ve en rojo.
+7. **Firma digital opcional.** Se puede adjuntar el **PDF firmado digitalmente**, por ejemplo con la firma digital remota gratuita de [firmar.gob.ar](https://firmar.gob.ar). Queda registrado con su propia huella.
+
+Si el contrato cambia después de enviarlo, el panel lo avisa y permite **enviar una nueva versión**. La anterior queda anulada en el registro.
+
+### Cobros
+
+- **Configuración** (*Configuración → Cobros y medios de pago*):
+  - medios de pago aceptados;
+  - banco, titular, CBU y alias;
+  - día de vencimiento;
+  - **interés por mora** (% mensual, calculado por día);
+  - días de gracia, recargo fijo y días para suspender servicios.
+- **Cuenta corriente** por cliente: resúmenes emitidos, vencimiento, pagos, intereses y saldo.
+  - Cada pago se imputa primero a intereses y después a capital (art. 903 del Código Civil y Comercial).
+  - Desde la cuenta del cliente se envía el **aviso de deuda** por WhatsApp o email.
+- **Pagos informados:** el miembro informa su pago desde el Área de Miembros, con comprobante opcional. Administración lo confirma o lo rechaza.
+
+### Reservas de salas
+
+- Hay un **calendario semanal por sala**.
+  - Los miembros reservan solos y ven los horarios ocupados por otros como «Ocupado», sin nombres.
+  - Administración ve todo y puede reservar para cualquier cliente.
+- Cada reserva se carga como consumo. **Las horas de sala incluidas en el contrato se descuentan solas** y se cobra solo el excedente.
+- Las reglas se configuran en *Configuración → Salas y reservas*:
+  - horario de apertura y cierre;
+  - bloques de 15, 30 o 60 minutos;
+  - duración máxima;
+  - días habilitados;
+  - **cancelación sin cargo hasta N horas antes**; si se cancela más tarde, se mantiene el cargo.
+
+### Factura electrónica ARCA
+
+Desde *Gastos y Facturación → Resúmenes emitidos → Facturar en ARCA*, el servidor pide el **CAE** a ARCA por los servicios web oficiales (WSAA + WSFEv1).
+
+- **Tipo de comprobante:**
+  - Factura **A** si PARALLAX y el cliente son Responsables Inscriptos;
+  - Factura **B** para Monotributo, Exento o Consumidor Final;
+  - Factura **C** si PARALLAX no es Responsable Inscripto.
+- **Datos que envía:**
+  - concepto «Servicios», con el período facturado y la fecha de vencimiento;
+  - la **condición frente al IVA del receptor** (`CondicionIVAReceptorId`), obligatoria según la RG 5616;
+  - el detalle del IVA.
+- **Al autorizarse:** guarda el CAE, su vencimiento y el **código QR** del comprobante.
+
+Configuración, una sola vez, con la clave fiscal de PARALLAX:
+
+1. Generar la clave y el pedido de certificado:
+   `openssl genrsa -out parallax.key 2048`
+   `openssl req -new -key parallax.key -subj "/C=AR/O=PARALLAX/CN=parallax/serialNumber=CUIT 30XXXXXXXXX" -out parallax.csr`
+2. En ARCA, ir a **Administración de Certificados Digitales**: subir el CSR y descargar el certificado (`.crt`).
+3. En el **Administrador de Relaciones de Clave Fiscal**, asociar el certificado al servicio **wsfe**.
+4. Crear un **punto de venta** del tipo *Factura Electrónica · Web Services*.
+5. Iniciar el servidor con `ARCA_CUIT`, `ARCA_CERT`, `ARCA_KEY` y `ARCA_PUNTO_VENTA`. Primero se prueba en homologación, con el certificado de testing. Después se pasa a producción con `ARCA_PRODUCCION=1`.
+
+El servidor necesita `openssl` instalado. Sin servidor (demo), el botón **simula** el comprobante: muestra los datos que se enviarían, pero no pide CAE y no tiene validez.
+
 ## Área de Miembros
 
 Cada miembro ingresa con el usuario y la contraseña que le genera la administración desde su legajo. Al ingresar ve:
@@ -121,6 +189,19 @@ Cada miembro ingresa con el usuario y la contraseña que le genera la administra
 - **Documentos:** su contrato firmado y la documentación compartida.
 - **Solicitudes:** pedidos a recepción, que llegan al panel.
 - **Mis datos:** su legajo; puede actualizar su teléfono y su email, y cambiar su contraseña.
+
+## Marco legal (Argentina) · revisalo con tu asesor legal y tu contador
+
+| Tema | Norma | Qué implica para PARALLAX |
+|---|---|---|
+| Firma electrónica y digital | Ley 25.506 y Decreto 182/2019 | La firma del Área de Miembros es **firma electrónica** (art. 5). Es válida, pero si alguien la desconoce, quien la invoca debe probarla; por eso se guardan la huella, la IP, el dispositivo y el registro de eventos. La **firma digital** (art. 2), con certificado de un certificador licenciado, tiene presunción de autoría e integridad. |
+| Forma y prueba de los contratos | Código Civil y Comercial, arts. 284 a 288 y 319 | Hay libertad de formas. El art. 288 exige firma digital para tener por cumplida la firma en instrumentos electrónicos; la doctrina discute si alcanza la firma electrónica. La recomendación es: firma electrónica para la operación diaria y firma digital (o firma en papel) para los contratos de mayor monto o duración. |
+| Contrato de servicios | CCyC, arts. 1251 y siguientes | El contrato es de locación de servicios entre partes independientes. |
+| Mora e intereses | CCyC, arts. 768, 771, 886 y 903 | La mora es automática al vencer el plazo. Los intereses punitorios pactados pueden ser reducidos por un juez si son excesivos. Los pagos se imputan primero a intereses. |
+| Datos personales | Ley 25.326 | Los legajos (DNI, fecha de nacimiento, etc.) se usan solo para el contrato. Hay que informar a los titulares sus derechos y consultar con la AAIP si corresponde inscribir la base. |
+| Factura electrónica | RG 4291, RG 5616 y normas de ARCA | Se emite factura electrónica con CAE y código QR, informando la condición frente al IVA del receptor. |
+
+El texto del contrato que genera el sistema es un **modelo**: revisalo y adaptalo con tu abogado antes de usarlo.
 
 ## Cuentas principales
 
@@ -146,12 +227,16 @@ Todo el sistema refleja una relación **estrictamente comercial** de locación d
 ```
 index.html · ingresar.html · miembros.html · gestoria.html
 server/server.js             Servidor (Node.js, sin dependencias)
+server/arca.js               Factura electrónica ARCA (WSAA + WSFEv1)
 assets/css/                  base, landing, panel, miembros
 assets/js/core/
   util.js                    Formatos es-AR, fechas, edad, CSV, validación de CUIT
   store.js                   Capa de datos (operaciones locales o hacia el servidor)
   backend.js                 Modo servidor/demostración, sesión, usuarios, archivos
   scope.js                   Qué datos ve cada miembro (lo usan navegador y servidor)
+  reglas.js                  SHA-256, contrato y firma, reservas, cuenta corriente, factura
+  agenda.js                  Calendario semanal de salas
+  firma-vista.js             Constancia de firma (panel y Área de Miembros)
   billing.js                 Resumen de gastos: abonos, incluidos, excedentes, IVA
   seed.js                    Datos de demostración e inventario de ejemplo
   icons.js                   Íconos SVG

@@ -7,7 +7,7 @@
   'use strict';
 
   const PLX = root.PLX;
-  const { util, store, ui, h, billing, domain, icon } = PLX;
+  const { util, store, ui, h, billing, domain, icon, backend } = PLX;
   const esc = util.esc;
 
   const LEGAL_NOTE = `<div class="note">${icon('contract', 'i-sm')}<div><strong>Contrato de locación de servicios.</strong> Vincula a PARALLAX como prestador de infraestructura y servicios compartidos con el cliente (locatario), en una relación de naturaleza estrictamente comercial entre partes independientes. Cada cliente conserva plena autonomía sobre su organización, su actividad y las personas que designa.</div></div>`;
@@ -177,6 +177,102 @@
     });
   };
 
+  /* ---------- Firma electrónica del contrato ---------- */
+  function panelFirma(id) {
+    const c = store.get('contratos', id);
+    const F = PLX.reglas.firma;
+    const est = F.estado(c);
+    const l = h.loc(c.locatarioId) || {};
+    const f = c.firma;
+    const pendiente = est === 'sin-enviar' || est === 'anulado';
+    const link = new URL('ingresar.html', root.location.href).href;
+    const mensaje = `Hola ${l.nombre || l.nombreComercial || ''}, te enviamos el contrato ${c.numero} de PARALLAX para que lo leas y lo firmes. Ingresá a ${link} con tu usuario ${l.numeroCliente || ''} y entrá a «Mi membresía». Código de verificación del documento: ${f ? f.codigo : ''}.`;
+    const tel = String(l.telefono || '').replace(/\D/g, '');
+    const quien = () => `${store.config().prestador.razonSocial || 'PARALLAX'} · ${(backend.user && (backend.user.nombre || backend.user.usuario)) || 'Administración'}`;
+
+    const botones = [];
+    if (pendiente) botones.push(`<button type="button" class="btn btn-sm btn-primary" data-maction="enviar">${icon('arrow-right', 'i-sm')} Generar documento y enviar a firmar</button>`);
+    else {
+      if (!f.prestador) botones.push(`<button type="button" class="btn btn-sm btn-outline-cyan" data-maction="firmar-prestador">${icon('edit', 'i-sm')} Firmar como PARALLAX</button>`);
+      botones.push(`<label class="btn btn-sm" style="cursor:pointer">${icon('upload', 'i-sm')} PDF con firma digital<input type="file" accept="application/pdf" id="pdf-digital" hidden></label>`);
+      botones.push(`<button type="button" class="btn btn-sm btn-ghost" data-maction="json">${icon('download', 'i-sm')} Constancia</button>`);
+      if (!f.cliente) botones.push(`<button type="button" class="btn btn-sm btn-ghost" data-maction="anular">${icon('x', 'i-sm')} Anular envío</button>`);
+      botones.push(`<button type="button" class="btn btn-sm btn-ghost" data-maction="reenviar">${icon('refresh', 'i-sm')} Nueva versión</button>`);
+    }
+
+    ui.modal({
+      title: `Firma · ${c.numero}`,
+      sub: `${esc(l.numeroCliente || '')} ${esc(l.nombreComercial || '')} · ${esc(F.ESTADOS[est].nombre)}`,
+      size: 'wide',
+      cancelLabel: 'Cerrar',
+      noAutofocus: true,
+      footLeft: botones.join(''),
+      body: pendiente
+        ? `<div class="note" style="margin-bottom:14px">${icon('info', 'i-sm')}<div>Al enviar se genera el texto del contrato con los datos actuales y se calcula su <strong>huella SHA-256</strong>. El cliente lo ve en su Área de Miembros, lo lee y lo firma reingresando su contraseña y dibujando su firma. Cada paso queda en un registro de eventos encadenado. Revisá el modelo con tu asesor legal antes de usarlo.</div></div>
+           <h3 class="ficha-title">${icon('contract', 'i-sm')} Vista previa del documento</h3>
+           <div class="contrato-texto">${esc(F.texto(store.db, c))}</div>`
+        : `${est === 'enviado' ? `<div class="banner">${icon('inbox')}<div class="grow"><strong>Avisale al cliente que tiene el contrato para firmar.</strong><div class="small text-2">Lo ve al ingresar al Área de Miembros. Podés mandarle este mensaje:</div></div>
+              <a class="btn btn-sm" target="_blank" rel="noopener" href="https://wa.me/${tel ? `549${tel.replace(/^0|^549?/, '')}` : ''}?text=${encodeURIComponent(mensaje)}">${icon('phone', 'i-sm')} WhatsApp</a>
+              <a class="btn btn-sm" href="mailto:${esc(l.email || '')}?subject=${encodeURIComponent(`Contrato ${c.numero} para firmar`)}&body=${encodeURIComponent(mensaje)}">${icon('mail', 'i-sm')} Email</a>
+              <button type="button" class="btn btn-sm btn-ghost" data-maction="copiar">${icon('copy', 'i-sm')} Copiar</button></div>` : ''}
+           ${PLX.firmaVista.constancia(c, { admin: true, db: store.db })}`,
+      onMount(d) {
+        const input = d.querySelector('#pdf-digital');
+        if (!input) return;
+        input.addEventListener('change', async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          try {
+            const hash = PLX.reglas.sha256(new Uint8Array(await file.arrayBuffer()));
+            const doc = await backend.files.upload(file, { locatarioId: c.locatarioId, categoria: 'Contrato firmado', contratoId: c.id, visibleMiembro: true });
+            const actual = store.get('contratos', c.id);
+            store.update('contratos', c.id, { firma: F.adjuntarDigital(actual, { documentoId: doc.id, nombre: file.name, hash, fecha: new Date().toISOString(), actor: backend.user.usuario }) });
+            ui.toast('PDF con firma digital adjuntado y registrado con su huella.');
+            panelFirma(c.id);
+          } catch (e) { ui.toast(e.message, 'warn'); }
+        });
+      },
+      onAction: {
+        enviar: () => {
+          if (!h.titular(l) && l.tipo !== 'empresa') { ui.toast('Completá el nombre del titular en el legajo antes de enviar.', 'warn'); return; }
+          store.update('contratos', c.id, { firma: F.enviar(store.db, c, { fecha: new Date().toISOString(), actor: backend.user.usuario }) });
+          ui.toast(`Contrato ${c.numero} enviado a firmar.`);
+          panelFirma(c.id);
+        },
+        'firmar-prestador': () => {
+          try {
+            store.update('contratos', c.id, { firma: F.firmarPrestador(store.get('contratos', c.id), { nombre: quien(), fecha: new Date().toISOString(), actor: backend.user.usuario }) });
+            ui.toast('Firmaste el contrato en nombre de PARALLAX.');
+            panelFirma(c.id);
+          } catch (e) { ui.toast(e.message, 'warn'); }
+        },
+        anular: async () => {
+          const ok = await ui.confirm({ title: 'Anular envío', message: `El cliente ya no podrá firmar la versión ${f.version} del contrato ${esc(c.numero)}.`, confirmLabel: 'Anular', danger: true });
+          if (ok) { store.update('contratos', c.id, { firma: F.anular(store.get('contratos', c.id), { fecha: new Date().toISOString(), actor: backend.user.usuario, motivo: 'Anulado por administración' }) }); ui.toast('Envío anulado.'); }
+          panelFirma(c.id);
+        },
+        reenviar: async () => {
+          const ok = await ui.confirm({ title: 'Enviar una nueva versión', message: 'Se genera un nuevo documento con los datos actuales y el cliente deberá firmarlo otra vez. La versión anterior queda anulada en su registro.', confirmLabel: 'Enviar nueva versión' });
+          if (!ok) return panelFirma(c.id);
+          const actual = store.get('contratos', c.id);
+          const anterior = F.anular(actual, { fecha: new Date().toISOString(), actor: backend.user.usuario, motivo: 'Reemplazado por una nueva versión' });
+          const nueva = F.enviar(store.db, Object.assign({}, actual, { firma: anterior }), { fecha: new Date().toISOString(), actor: backend.user.usuario });
+          store.update('contratos', c.id, { firma: nueva, firmasAnteriores: (actual.firmasAnteriores || []).concat([anterior]) });
+          ui.toast(`Versión ${nueva.version} enviada a firmar.`);
+          panelFirma(c.id);
+        },
+        copiar: () => {
+          (navigator.clipboard ? navigator.clipboard.writeText(mensaje) : Promise.reject()).then(() => ui.toast('Mensaje copiado.')).catch(() => ui.toast('No se pudo copiar: seleccioná el texto manualmente.', 'warn'));
+        },
+        json: () => {
+          util.download(`constancia-firma-${c.numero}.json`, PLX.firmaVista.json(store.get('contratos', c.id)), 'application/json');
+          ui.toast('Constancia descargada.');
+        }
+      }
+    });
+  }
+  PLX.forms.firma = panelFirma;
+
   /* ---------- Render de pestañas ---------- */
   function tabContratos(st) {
     const q = util.normalize(st.q);
@@ -220,7 +316,15 @@
             { label: 'Vigencia', cell: ({ c }) => `<span class="mono small">${util.fmtDate(c.fechaInicio)} → ${c.fechaFin ? util.fmtDate(c.fechaFin) : 'indeterminado'}</span><span class="sub">${esc(c.ajuste || '')}</span>` },
             { label: 'Estado', cell: ({ c }) => h.contratoBadge(c) },
             {
+              label: 'Firma', cell: ({ c }) => {
+                const ef = PLX.reglas.firma.estado(c);
+                const e = PLX.reglas.firma.ESTADOS[ef];
+                return `<button type="button" class="link-btn" data-action="firma" data-id="${c.id}">${ui.badge(e.nombre, e.tono, ef !== 'sin-enviar')}</button>${c.firma && c.firma.codigo && ef !== 'anulado' ? `<span class="sub mono">${esc(c.firma.codigo)}</span>` : ''}`;
+              }
+            },
+            {
               label: '', cls: 'actions', cell: ({ c }) =>
+                ui.iconBtn('firma', 'file-check', 'Firma del contrato', `data-id="${c.id}"`) +
                 ui.iconBtn('editar-contrato', 'edit', 'Editar contrato', `data-id="${c.id}"`) +
                 (c.estado === 'vigente'
                   ? ui.iconBtn('suspender', 'minus', 'Suspender contrato', `data-id="${c.id}"`)
@@ -228,7 +332,7 @@
                 ui.iconBtn('eliminar-contrato', 'trash', 'Eliminar contrato', `data-id="${c.id}"`)
             }
           ],
-          foot: rows.length ? `<tr><td colspan="3" data-label="">Total abonos vigentes (mensual)</td><td class="num" data-label="Total">${util.money(totalVig)}</td><td colspan="4" data-label=""></td></tr>` : ''
+          foot: rows.length ? `<tr><td colspan="3" data-label="">Total abonos vigentes (mensual)</td><td class="num" data-label="Total">${util.money(totalVig)}</td><td colspan="5" data-label=""></td></tr>` : ''
         })}
       </section>`;
   }
@@ -294,6 +398,7 @@
 
     actions: {
       'nuevo-contrato': () => PLX.forms.contrato(),
+      firma: (el) => panelFirma(el.dataset.id),
       'nuevo-plan': () => PLX.forms.plan(),
       'editar-contrato': (el) => PLX.forms.contrato(el.dataset.id),
       'editar-plan': (el) => PLX.forms.plan(el.dataset.id),

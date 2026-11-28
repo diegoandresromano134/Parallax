@@ -108,7 +108,7 @@
       }),
       Object.assign({}, legajoVacio, {
         id: 'loc_kora', numeroCliente: 'CL-0004', tipo: 'empresa', nombreComercial: 'Kora Estudio', razonSocial: 'Kora Estudio S.R.L.',
-        nombre: 'Paula', apellido: 'Ferreyra', nacimiento: '1988-04-12', email: 'paula@kora.example', telefono: '11 5555-0101',
+        nombre: 'Paula', apellido: 'Ferreyra', documento: '28.555.444', nacimiento: '1988-04-12', email: 'paula@kora.example', telefono: '11 5555-0101',
         cuit: '', condicionIva: 'Responsable Inscripto', fechaContrato: firstOf(-3), principal: false, demo: true,
         notas: 'Legajo de demostración.'
       }),
@@ -295,10 +295,7 @@
     if (PLX.billing && PLX.domain) {
       const cuentas = { abonos: PLX.domain.CUENTA_ABONOS };
       PLX.domain.CATEGORIAS.forEach((c) => (cuentas[c.id] = c.cuenta));
-      db.config = {
-        prestador: { nombre: 'PARALLAX', razonSocial: '', cuit: '', condicionIva: 'Responsable Inscripto', domicilio: '', email: '' },
-        ivaAlicuota: 21, prorrateo: true, cuentas, secuenciaResumen: 0, secuenciaCliente: 5
-      };
+      db.config = Object.assign(PLX.store.emptyDb().config, { cuentas, secuenciaResumen: 0, secuenciaCliente: 5 });
       const pPrev = util.shiftPeriod(p0, -1);
       const emision = util.parseDate(firstOf(0));
       emision.setHours(10, 0, 0, 0);
@@ -312,6 +309,69 @@
         });
       });
     }
+    /* ---------- Salas y reservas (semana actual y próxima) ---------- */
+    db.salas = [
+      { id: 'sala_a', nombre: 'Sala A', capacidad: 6, insumoId: 'ins_sala', equipamiento: 'Pantalla 55", videoconferencia', color: 'cyan', activa: true },
+      { id: 'sala_b', nombre: 'Sala B', capacidad: 10, insumoId: 'ins_sala', equipamiento: 'Pantalla, pizarra', color: 'magenta', activa: true },
+      { id: 'sala_conf', nombre: 'Sala de conferencias', capacidad: 40, insumoId: 'ins_conf', equipamiento: 'Proyector y sonido', color: 'violet', activa: true }
+    ];
+    db.reservas = [];
+    if (PLX.reglas) {
+      const lunes = util.addDays(hoy, -((util.parseDate(hoy).getDay() + 6) % 7));
+      const titulos = ['Reunión de equipo', 'Entrevista con cliente', 'Presentación', 'Capacitación interna', 'Reunión de directorio', 'Videollamada'];
+      const clientes = ['loc_celius', 'loc_nivel', 'loc_myc', 'loc_kora', 'loc_leiva'];
+      let rn = 1;
+      for (let d = 0; d < 12; d++) {
+        const fecha = util.addDays(lunes, d);
+        const dow = util.parseDate(fecha).getDay();
+        if (dow === 0 || dow === 6) continue;
+        db.salas.forEach((sala) => {
+          let hora = 9 + between(0, 2);
+          const cant = sala.id === 'sala_conf' ? (rnd() < 0.25 ? 1 : 0) : between(1, 3);
+          for (let k = 0; k < cant && hora < 18; k++) {
+            const dur = sala.id === 'sala_conf' ? 4 : between(1, 2);
+            const loc = pick(clientes);
+            const c = contratos.find((x) => x.locatarioId === loc);
+            if (c && fecha < c.fechaInicio) { hora += dur; continue; }
+            const desde = `${util.pad(hora)}:00`, hasta = `${util.pad(Math.min(hora + dur, 20))}:00`;
+            const { reserva, consumo } = PLX.reglas.reservas.armar(db, { salaId: sala.id, locatarioId: loc, fecha, desde, hasta, titulo: pick(titulos) }, { id: `rsv_${rn}`, consumoId: `cns_r${rn}`, fecha: isoAgo(3 * 86400000), origen: rnd() < 0.6 ? 'miembro' : 'administracion' });
+            rn++;
+            db.reservas.push(reserva);
+            if (consumo) db.consumos.push(consumo);
+            hora += dur + between(0, 2);
+          }
+        });
+      }
+
+      /* ---------- Firma de contratos ---------- */
+      const F = PLX.reglas.firma;
+      const firmaSvg = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120"><path d="M20 80 C 50 20, 80 110, 110 60 S 160 20, 190 70 S 240 100, 270 50 S 320 40, 340 70" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round"/></svg>');
+      const kora = contratos.find((c) => c.id === 'con_4');
+      const t0 = new Date(util.parseDate(kora.fechaInicio).getTime() - 3 * 86400000);
+      t0.setHours(11, 5, 0, 0);
+      kora.firma = F.enviar(db, kora, { fecha: t0.toISOString(), actor: 'admin' });
+      kora.firma = F.registrarVista(kora, { fecha: new Date(t0.getTime() + 3600000).toISOString(), actor: 'CL-0004', ip: '190.210.12.34', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)' });
+      kora.firma = F.firmarCliente(kora, { nombre: 'Paula Ferreyra', dni: '28555444', imagen: firmaSvg }, { fecha: new Date(t0.getTime() + 3900000).toISOString(), actor: 'CL-0004', ip: '190.210.12.34', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)' });
+      kora.firma = F.firmarPrestador(kora, { nombre: 'PARALLAX · Administración', fecha: new Date(t0.getTime() + 7200000).toISOString(), actor: 'admin' });
+      const leivaC = contratos.find((c) => c.id === 'con_5');
+      leivaC.firma = F.enviar(db, leivaC, { fecha: isoAgo(2 * 86400000), actor: 'admin' });
+
+      /* ---------- Pagos de los resúmenes del mes anterior ---------- */
+      const diaMes = (d) => util.todayStr(new Date(now.getFullYear(), now.getMonth(), Math.min(d, now.getDate())));
+      const rs = (loc) => db.resumenes.find((r) => r.locatarioId === loc);
+      const pago = (loc, frac, dia, medio, estado = 'confirmado', ref = '') => {
+        const r = rs(loc);
+        if (!r) return;
+        db.pagos.push({ id: `pag_${db.pagos.length + 1}`, locatarioId: loc, resumenId: r.id, fecha: diaMes(dia), importe: util.round2(r.total * frac), medio, referencia: ref, estado, origen: estado === 'informado' ? 'miembro' : 'administracion', creadoEn: isoAgo(86400000) });
+      };
+      db.pagos = [];
+      pago('loc_celius', 1, 8, 'Transferencia bancaria', 'confirmado', 'Op. 554120');
+      pago('loc_nivel', 0.6, 9, 'Echeq', 'confirmado', 'Echeq 0031');
+      pago('loc_kora', 1, 20, 'Mercado Pago', 'confirmado', 'MP 9981');
+      pago('loc_myc', 0.5, 26, 'Transferencia bancaria', 'informado', 'Op. 771203');
+    }
+    db.facturas = [];
+
     return db;
   }
 

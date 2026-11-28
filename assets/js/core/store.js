@@ -20,7 +20,7 @@
 
   const KEY = 'parallax.db.v2';
   const SCHEMA = 2;
-  const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos'];
+  const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos', 'salas', 'reservas', 'pagos', 'facturas'];
 
   /* ---------- Constantes del dominio ---------- */
   const domain = {
@@ -76,6 +76,19 @@
       'Asesoría y Gestoría',
       'Agendar una visita'
     ],
+    MEDIOS_PAGO: [
+      { id: 'transferencia', nombre: 'Transferencia bancaria', detalle: '', activo: true },
+      { id: 'mercadopago', nombre: 'Mercado Pago', detalle: '', activo: true },
+      { id: 'echeq', nombre: 'Echeq', detalle: '', activo: true },
+      { id: 'efectivo', nombre: 'Efectivo en recepción', detalle: '', activo: true },
+      { id: 'tarjeta', nombre: 'Tarjeta de débito o crédito', detalle: '', activo: false },
+      { id: 'debito', nombre: 'Débito automático', detalle: '', activo: false }
+    ],
+    ESTADOS_PAGO: {
+      confirmado: { nombre: 'Acreditado', tono: 'cyan' },
+      informado: { nombre: 'Informado, a confirmar', tono: 'magenta' },
+      rechazado: { nombre: 'Rechazado', tono: 'outline' }
+    },
     TIPOS_SOLICITUD: ['Reserva de sala', 'Insumos', 'Equipamiento', 'Horas adicionales', 'Asesoría o Gestoría', 'Otra consulta'],
     catNombre(id) {
       const c = domain.CATEGORIAS.find((x) => x.id === id);
@@ -112,7 +125,14 @@
       prorrateo: true,
       cuentas,
       secuenciaResumen: 0,
-      secuenciaCliente: 0
+      secuenciaCliente: 0,
+      cobros: {
+        mediosPago: domain.MEDIOS_PAGO.map((m) => Object.assign({}, m)),
+        banco: '', titular: '', cbu: '', alias: '',
+        tasaMensual: 4, recargoFijo: 0, diasGracia: 3, diaVencimiento: 10, suspenderDias: 30
+      },
+      reservas: { apertura: '08:00', cierre: '20:00', paso: 30, maxHoras: 4, cancelacionHoras: 24, dias: [1, 2, 3, 4, 5, 6] },
+      facturacion: { puntoVenta: 1, entorno: 'homologacion' }
     };
   }
 
@@ -135,6 +155,9 @@
     db.config = Object.assign(def, db.config || {});
     db.config.cuentas = Object.assign(defaultConfig().cuentas, db.config.cuentas || {});
     db.config.prestador = Object.assign(defaultConfig().prestador, db.config.prestador || {});
+    db.config.cobros = Object.assign(defaultConfig().cobros, db.config.cobros || {});
+    db.config.reservas = Object.assign(defaultConfig().reservas, db.config.reservas || {});
+    db.config.facturacion = Object.assign(defaultConfig().facturacion, db.config.facturacion || {});
     db.meta = Object.assign({ rev: 0 }, db.meta || {});
     return db;
   }

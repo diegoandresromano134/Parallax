@@ -92,6 +92,35 @@
             <div class="meta">${sinEmitir.map((l) => esc(l.nombreComercial)).join(', ')}</div></div>
             ${ui.badge(String(sinEmitir.length), 'magenta')}
           </a>`] : []),
+        ...db.contratos.filter((c) => PLX.reglas.firma.estado(c) === 'enviado').map((c) => `
+          <button type="button" class="list-item link-btn" style="width:100%" data-action="firma" data-id="${c.id}">
+            <span class="avatar">${icon('file-check', 'i-sm')}</span>
+            <div class="grow"><div class="title">Contrato ${esc(c.numero)} pendiente de firma</div>
+            <div class="meta">${esc(h.locName(c.locatarioId))} · enviado el ${util.fmtDate(util.localDateOfIso(c.firma.documento.generadoEn))}</div></div>
+            ${ui.badge('A firmar', 'magenta', true)}
+          </button>`),
+        ...db.contratos.filter((c) => PLX.reglas.firma.estado(c) === 'firmado-cliente').map((c) => `
+          <button type="button" class="list-item link-btn" style="width:100%" data-action="firma" data-id="${c.id}">
+            <span class="avatar">${icon('edit', 'i-sm')}</span>
+            <div class="grow"><div class="title">${esc(h.locName(c.locatarioId))} firmó el contrato ${esc(c.numero)}</div>
+            <div class="meta">Falta la firma de PARALLAX</div></div>
+            ${ui.badge('Contrafirmar', 'cyan', true)}
+          </button>`),
+        ...(db.pagos.some((p) => p.estado === 'informado') ? [`
+          <a class="list-item" href="#cobros">
+            <span class="avatar">${icon('inbox', 'i-sm')}</span>
+            <div class="grow"><div class="title">Pagos informados por miembros</div><div class="meta">Verificá la acreditación y confirmalos</div></div>
+            ${ui.badge(String(db.pagos.filter((p) => p.estado === 'informado').length), 'magenta')}
+          </a>`] : []),
+        ...(() => {
+          const morosos = db.locatarios.map((l) => ({ l, e: PLX.reglas.cuenta.estado(db, l.id) })).filter((x) => x.e.vencido > 0.5);
+          return morosos.length ? [`
+          <a class="list-item" href="#cobros">
+            <span class="avatar">${icon('alert', 'i-sm')}</span>
+            <div class="grow"><div class="title">Saldos vencidos · ${util.money0(util.sum(morosos, (x) => x.e.vencido))}</div><div class="meta">${morosos.map((x) => esc(x.l.nombreComercial)).join(', ')}</div></div>
+            ${ui.badge(String(morosos.length), 'magenta')}
+          </a>`] : [];
+        })(),
         ...(observados.length ? [`
           <a class="list-item" href="#checkin">
             <span class="avatar">${icon('alert', 'i-sm')}</span>
@@ -192,6 +221,7 @@
     actions: {
       'nuevo-ingreso': () => PLX.forms.checkin(),
       'nuevo-legajo': () => PLX.forms.legajo(),
+      firma: (el) => PLX.forms.firma(el.dataset.id),
       'nuevo-consumo': () => PLX.forms.consumo(),
       'nuevo-contrato': () => PLX.forms.contrato(),
       egreso: (el) => PLX.forms.checkout(el.dataset.id)

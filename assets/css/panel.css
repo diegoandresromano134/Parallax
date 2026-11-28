@@ -778,3 +778,75 @@ button.chip:hover { border-color: var(--border-2); color: var(--text); }
   .segs { flex-wrap: wrap; border-radius: 14px; }
   .item-row { grid-template-columns: minmax(0, 1fr) 72px auto; }
 }
+
+/* ==========================================================================
+   v3: calendario de salas, firma de contratos, cobros
+   ========================================================================== */
+.ag-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ag-salas { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.ag-salas .chip { gap: 8px; }
+.ag-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.ag-info { margin-bottom: 10px; }
+.ag-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); background: rgba(0, 0, 0, 0.25); }
+.ag-grid { display: grid; grid-template-columns: 56px repeat(var(--n), minmax(110px, 1fr)); min-width: 720px; }
+.ag-head { height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); position: sticky; top: 0; }
+.ag-head strong { font-family: var(--font-mono); font-size: 13px; color: var(--text); font-weight: 500; }
+.ag-day { border-left: 1px solid var(--border); }
+.ag-day.is-today .ag-head { color: var(--cyan); background: rgba(63, 230, 245, 0.06); }
+.ag-day.is-today .ag-head strong { color: var(--cyan); }
+.ag-col { position: relative; }
+.ag-hours span { position: absolute; right: 8px; transform: translateY(-50%); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.ag-hours span:first-child { transform: none; }
+.ag-slot {
+  position: absolute; left: 0; right: 0; border: 0; padding: 0; background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.035); cursor: pointer;
+}
+.ag-slot span { opacity: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--cyan); }
+.ag-slot:hover, .ag-slot:focus-visible { background: rgba(63, 230, 245, 0.1); outline: none; }
+.ag-slot:hover span, .ag-slot:focus-visible span { opacity: 1; }
+.ag-slot.is-past { background: rgba(255, 255, 255, 0.015); cursor: default; }
+.ag-res {
+  position: absolute; left: 4px; right: 4px; z-index: 2; overflow: hidden;
+  display: flex; flex-direction: column; gap: 1px; padding: 4px 7px; text-align: left;
+  border-radius: 8px; border: 1px solid; font: inherit; font-size: 11.5px; line-height: 1.25; color: var(--text); cursor: pointer;
+}
+.ag-res strong { font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.ag-res span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+.ag-cyan { background: rgba(20, 163, 184, 0.28); border-color: rgba(63, 230, 245, 0.5); }
+.ag-magenta { background: rgba(201, 68, 224, 0.26); border-color: rgba(224, 76, 240, 0.5); }
+.ag-violet { background: rgba(143, 140, 247, 0.26); border-color: rgba(166, 139, 246, 0.55); }
+.ag-dot.ag-cyan { background: var(--cyan); }
+.ag-dot.ag-magenta { background: var(--magenta); }
+.ag-dot.ag-violet { background: #a68bf6; }
+.ag-res.is-ajena {
+  cursor: default; border-color: var(--border-2);
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 6px, rgba(255, 255, 255, 0.02) 6px 12px);
+}
+.ag-res.is-propia { box-shadow: 0 0 0 1px var(--cyan), 0 0 16px -4px rgba(63, 230, 245, 0.6); }
+.ag-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--magenta); z-index: 3; box-shadow: 0 0 8px var(--magenta); pointer-events: none; }
+
+/* Documento del contrato y firma */
+.contrato-texto {
+  max-height: 46vh; overflow-y: auto; white-space: pre-wrap; font-size: 13.5px; line-height: 1.65; color: var(--text);
+  padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border-2); background: rgba(0, 0, 0, 0.3);
+}
+.hash { font-family: var(--font-mono); font-size: 12.5px; word-break: break-all; color: var(--cyan); }
+.verif { display: grid; gap: 6px; font-size: 13.5px; }
+.verif li { display: flex; align-items: center; gap: 8px; }
+.verif .ok { color: var(--cyan); }
+.verif .bad { color: #f0a0fa; }
+.firma-img { max-width: 280px; height: auto; border-radius: 10px; background: #f4f6f8; padding: 6px; }
+.eventos { width: 100%; font-size: 12.5px; }
+.eventos td, .eventos th { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.eventos th { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.firma-pad-wrap { position: relative; border-radius: var(--radius); border: 1px dashed var(--border-2); background: #f4f6f8; touch-action: none; }
+.firma-pad { display: block; width: 100%; height: 160px; cursor: crosshair; touch-action: none; border-radius: var(--radius); }
+.firma-pad-wrap .btn { position: absolute; right: 8px; top: 8px; color: #333; }
+.firma-pad-hint { position: absolute; left: 14px; bottom: 10px; font-size: 12px; color: #8a909a; pointer-events: none; }
+.banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 16px;
+  border-radius: var(--radius); border: 1px solid rgba(224, 76, 240, 0.4); background: linear-gradient(90deg, rgba(224, 76, 240, 0.1), rgba(63, 230, 245, 0.05));
+}
+.banner .grow { flex: 1; min-width: 200px; }
+.copy-box { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-2); background: rgba(0, 0, 0, 0.3); }
+.copy-box .grow { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }

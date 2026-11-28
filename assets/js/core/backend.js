@@ -164,6 +164,13 @@
     };
   }
 
+  function actualizarFirma(contratoId, firma) {
+    const c = store.get('contratos', contratoId);
+    if (!c) return;
+    c.firma = firma;
+    store.replaceAll(store.db);
+  }
+
   /* ---------- API pública ---------- */
   const backend = {
     mode: null,     // 'servidor' | 'demo'
@@ -384,6 +391,117 @@
         }
         const loc = store.get('locatarios', backend.user.locatarioId) || {};
         return store.insert('consultas', Object.assign(rec, { email: loc.email || '', empresa: loc.nombreComercial }), 'cta');
+      }
+    },
+
+    /* ---------- Firma, reservas y pagos del miembro ---------- */
+    contrato: {
+      async visto(contratoId) {
+        if (backend.mode === 'servidor') {
+          try { const r = await api('api/miembro/contrato/visto', { json: { contratoId } }); actualizarFirma(contratoId, r.firma); } catch (e) { /* no bloquea */ }
+          return;
+        }
+        const c = store.get('contratos', contratoId);
+        if (!c || !c.firma) return;
+        const f = PLX.reglas.firma.registrarVista(c, { fecha: new Date().toISOString(), actor: backend.user.usuario, ua: navigator.userAgent });
+        if (f !== c.firma) store.update('contratos', c.id, { firma: f });
+      },
+      async firmar(contratoId, datos) {
+        if (backend.mode === 'servidor') {
+          const r = await api('api/miembro/contrato/firmar', { json: Object.assign({ contratoId }, datos) });
+          actualizarFirma(contratoId, r.firma);
+          return r.firma;
+        }
+        const u = demoUsers.all().find((x) => x.id === backend.user.id);
+        if (!u || (await hashPass(datos.password, u.salt)) !== u.hash) throw new Error('La contraseña no es correcta.');
+        const c = store.get('contratos', contratoId);
+        if (!c || c.locatarioId !== backend.user.locatarioId) throw new Error('Contrato no encontrado.');
+        const f = PLX.reglas.firma.firmarCliente(c, datos, { fecha: new Date().toISOString(), actor: backend.user.usuario, ip: null, ua: navigator.userAgent });
+        store.update('contratos', c.id, { firma: f });
+        return f;
+      }
+    },
+    reservas: {
+      async crear(d) {
+        if (backend.mode === 'servidor') {
+          const r = await api('api/miembro/reservas', { json: d });
+          store.applyRemote('reservas', r.reserva);
+          if (r.consumo) store.applyRemote('consumos', r.consumo);
+          return r.reserva;
+        }
+        const datos = Object.assign({}, d, { locatarioId: backend.user.locatarioId });
+        const err = PLX.reglas.reservas.validar(store.db, datos);
+        if (err) throw new Error(err);
+        const { reserva, consumo } = PLX.reglas.reservas.armar(store.db, datos, { id: util.uid('rsv'), consumoId: util.uid('cns'), fecha: new Date().toISOString(), origen: 'miembro' });
+        if (consumo) store.insert('consumos', consumo);
+        return store.insert('reservas', reserva);
+      },
+      async cancelar(id) {
+        if (backend.mode === 'servidor') {
+          const r = await api(`api/miembro/reservas/${encodeURIComponent(id)}/cancelar`, { method: 'POST' });
+          store.applyRemote('reservas', r.reserva);
+          if (!r.cargoMantenido) { const list = store.all('consumos'); const i = list.findIndex((c) => c.id === r.reserva.consumoId); if (i >= 0) list.splice(i, 1); store.replaceAll(store.db); }
+          return r;
+        }
+        return backend.reservas.cancelarLocal(id);
+      },
+      /** Cancelación aplicando la política (usada también por administración). */
+      cancelarLocal(id, { forzarSinCargo = false } = {}) {
+        const r = store.get('reservas', id);
+        const pol = PLX.reglas.reservas.cancelacion(store.db, r);
+        if (pol.yaPaso && !forzarSinCargo) throw new Error('La reserva ya comenzó; no se puede cancelar.');
+        store.update('reservas', id, { estado: 'cancelada', canceladaEn: new Date().toISOString() });
+        const mantener = pol.tarde && !forzarSinCargo;
+        if (!mantener && r.consumoId) store.remove('consumos', r.consumoId);
+        else if (r.consumoId && store.get('consumos', r.consumoId)) store.update('consumos', r.consumoId, { nota: `${store.get('consumos', r.consumoId).nota} · cancelada con menos de ${pol.horas} h` });
+        return { reserva: store.get('reservas', id), cargoMantenido: mantener };
+      }
+    },
+    pagos: {
+      /** El miembro informa un pago (con comprobante opcional). */
+      async informar(d, archivo) {
+        let comprobanteId = null;
+        if (archivo) {
+          if (archivo.size > 10 * 1024 * 1024) throw new Error('El comprobante supera los 10 MB.');
+          if (backend.mode === 'servidor') {
+            const q = new URLSearchParams({ nombre: archivo.name });
+            const doc = (await api(`api/miembro/archivos?${q}`, { method: 'POST', body: archivo, headers: { 'Content-Type': archivo.type || 'application/octet-stream' } })).documento;
+            store.applyRemote('documentos', doc);
+            comprobanteId = doc.id;
+          } else {
+            const doc = { id: util.uid('doc'), locatarioId: backend.user.locatarioId, nombre: archivo.name, tipo: archivo.type, tamano: archivo.size, categoria: 'Comprobante de pago', visibleMiembro: true, subidoPor: 'miembro', subidoEn: new Date().toISOString() };
+            await idb.put(doc.id, archivo);
+            store.insert('documentos', doc);
+            comprobanteId = doc.id;
+          }
+        }
+        const pago = { resumenId: d.resumenId || null, fecha: d.fecha, importe: Number(d.importe), medio: d.medio, referencia: d.referencia || '', comprobanteId };
+        if (!(pago.importe > 0)) throw new Error('Indicá el importe pagado.');
+        if (backend.mode === 'servidor') {
+          const r = await api('api/miembro/pagos', { json: pago });
+          store.applyRemote('pagos', r.pago);
+          return r.pago;
+        }
+        return store.insert('pagos', Object.assign(pago, { locatarioId: backend.user.locatarioId, estado: 'informado', origen: 'miembro' }), 'pag');
+      }
+    },
+
+    /* ---------- Factura electrónica ARCA ---------- */
+    arca: {
+      async estado() {
+        if (backend.mode === 'servidor') return api('api/arca/estado');
+        return { configurado: false, simulacion: true, faltan: ['servidor'], entorno: 'simulacion' };
+      },
+      async facturar(resumenId) {
+        if (backend.mode === 'servidor') {
+          const r = await api('api/arca/facturar', { json: { resumenId } });
+          store.applyRemote('facturas', r.factura);
+          return r.factura;
+        }
+        // Simulación en modo demostración: muestra los datos que se enviarían, sin CAE
+        const resumen = store.get('resumenes', resumenId);
+        const f = PLX.reglas.factura.armar(store.db, resumen);
+        return store.insert('facturas', Object.assign(f, { resumenId, locatarioId: resumen.locatarioId, puntoVenta: (store.config().facturacion || {}).puntoVenta || 1, numero: null, cae: null, caeVto: null, estado: 'simulada', entorno: 'simulacion' }), 'fac');
       }
     },
 
