@@ -20,6 +20,7 @@
 
   const KEY = 'parallax.db.v2';
   const SCHEMA = 2;
+  const SEED_VERSION = 3; // sube cuando cambian los datos de demostración
   const COLLECTIONS = ['locatarios', 'planes', 'contratos', 'personas', 'accesos', 'insumos', 'consumos', 'consultas', 'resumenes', 'documentos', 'salas', 'reservas', 'pagos', 'facturas'];
 
   /* ---------- Constantes del dominio ---------- */
@@ -220,7 +221,8 @@
       let db = read();
       if (!db || db.version !== SCHEMA) db = emptyDb();
       mem = migrate(db);
-      if (seed && !mem.meta.seeded) {
+      const demoViejo = mem.meta.demo && (mem.meta.seedVersion || 2) < SEED_VERSION;
+      if (seed && (!mem.meta.seeded || demoViejo)) {
         const keepConsultas = mem.consultas.slice();
         mem = migrate(seed());
         mem.consultas = keepConsultas.concat(mem.consultas);

@@ -286,7 +286,7 @@
 
     const db = {
       version: 2,
-      meta: { seeded: true, demo: true, creado: now.toISOString(), actualizado: now.toISOString(), rev: 0 },
+      meta: { seeded: true, demo: true, seedVersion: 3, creado: now.toISOString(), actualizado: now.toISOString(), rev: 0 },
       config: undefined,
       locatarios, planes, contratos, personas, accesos, insumos, consumos, consultas, resumenes: [], documentos: []
     };
